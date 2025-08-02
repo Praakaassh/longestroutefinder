@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "997047437506",
+    "project_id": "tinderhub-d0a30",
+    "storage_bucket": "tinderhub-d0a30.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:997047437506:android:46002f40e128a63fd8535b",
+        "android_client_info": {
+          "package_name": "com.example.tinderprojecthub"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "997047437506-kiptp8aubgeqj9mejjjb15gu3qtge3sf.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.tinderprojecthub",
+            "certificate_hash": "d1883ff57792b91b77a302e18cbdeb97bafe3612"
+          }
+        },
+        {
+          "client_id": "997047437506-ouam48vr4qeiicq1qf60gp2u2o6apacr.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA7IiyQ1PKxn1RpOd782cRIoCmCOkl4cvs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "997047437506-ouam48vr4qeiicq1qf60gp2u2o6apacr.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
