@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:math' as math;
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:geocoding/geocoding.dart';
@@ -19,7 +19,10 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
   final Completer<GoogleMapController> _controller = Completer();
   GoogleMapController? _mapController;
 
-  static const String _placesApiKey = 'AIzaSyBGOhyR-FU97Fd8hLbRGN8-ERs7gtlvvIs'; // Replace with your actual key
+  // --- IMPORTANT: REPLACE WITH YOUR KEYS ---
+  static const String _googleMapsApiKey = 'AIzaSyBGOhyR-FU97Fd8hLbRGN8-ERs7gtlvvIs'; // Replace with your Google Maps key
+  static const String _geminiApiKey = 'AIzaSyB9f1sjZCc7VSV-2M8d3Yj8bXZk6D0abkU'; // Replace with your Gemini API key
+
   static const CameraPosition _kGooglePlex =
   CameraPosition(target: LatLng(10.8505, 76.2711), zoom: 7.0);
 
@@ -31,25 +34,21 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
   bool _isLoadingLocation = true;
   MapType _currentMapType = MapType.normal;
 
-  // Search UI State
   bool _showSearchBar = false;
   final TextEditingController _searchController = TextEditingController();
   bool _isSearching = false;
   List<SearchResult> _searchResults = [];
   Timer? _debounce;
 
-  // Ride State
   bool _isRideActive = false;
   Waypoint? _activeDestination;
   List<LatLng> _routePoints = [];
   double _totalDistance = 0.0;
-  double _estimatedTime = 0.0; // In minutes
+  double _estimatedTime = 0.0;
 
-  // Animation
   late AnimationController _rideAnimationController;
   late Animation<double> _rideAnimation;
 
-  // Subscriptions & Timers
   StreamSubscription<Position>? _positionStream;
   Timer? _routeUpdateTimer;
 
@@ -59,7 +58,6 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
     _getCurrentLocation();
     _setInitialMarkers();
     _initializeAnimations();
-    _addLandUseZonePolygon();
   }
 
   @override
@@ -82,37 +80,13 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
         CurvedAnimation(parent: _rideAnimationController, curve: Curves.easeInOut);
   }
 
-  void _setInitialMarkers() {
-    _markers = {};
-  }
+  void _setInitialMarkers() => _markers = {};
 
-  // Add a sample polygon (demo)
-  void _addLandUseZonePolygon() {
-    final List<LatLng> polygonPoints = [
-      const LatLng(10.855, 76.275),
-      const LatLng(10.860, 76.280),
-      const LatLng(10.858, 76.285),
-      const LatLng(10.853, 76.280),
-    ];
-    final Polygon landUseZone = Polygon(
-      polygonId: const PolygonId('residential_zone_1'),
-      points: polygonPoints,
-      fillColor: Colors.blue.withOpacity(0.3),
-      strokeColor: Colors.blue,
-      strokeWidth: 2,
-      zIndex: 0,
-    );
-    setState(() {
-      _polygons.add(landUseZone);
-    });
-  }
-
-  // Location Handling
   Future<void> _getCurrentLocation() async {
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
-        _handleLocationError('Location services are disabled. Please enable them.');
+        _handleLocationError('Location services are disabled.');
         return;
       }
       LocationPermission permission = await Geolocator.checkPermission();
@@ -124,13 +98,10 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
         }
       }
       if (permission == LocationPermission.deniedForever) {
-        _handleLocationError('Location permissions are permanently denied. We cannot request permissions.');
+        _handleLocationError('Location permissions are permanently denied.');
         return;
       }
-      Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-        timeLimit: const Duration(seconds: 15),
-      );
+      Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
       if (!mounted) return;
       setState(() {
         _currentPosition = position;
@@ -138,10 +109,6 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
       });
       _animateToPosition(position.latitude, position.longitude);
       _addUserLocationMarker();
-    } on PlatformException catch (e) {
-      _handleLocationError('Error checking location permissions: ${e.message}');
-    } on TimeoutException {
-      _handleLocationError('Location request timed out. Please try again.');
     } catch (e) {
       _handleLocationError('An error occurred while getting location: $e');
     }
@@ -167,7 +134,6 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
     }
   }
 
-  // Map Controls & Actions
   Future<void> _animateToPosition(double lat, double lng) async {
     final controller = await _controller.future;
     controller.animateCamera(
@@ -195,45 +161,33 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
     }
   }
 
-  // Search Functionality (Places autocomplete)
   Future<void> _searchLocation(String query) async {
     if (query.length < 2) {
       setState(() => _searchResults.clear());
       return;
     }
     setState(() => _isSearching = true);
-    String locationBias = '';
-    if (_mapController != null) {
-      LatLngBounds bounds = await _mapController!.getVisibleRegion();
-      LatLng center = LatLng((bounds.northeast.latitude + bounds.southwest.latitude) / 2,
-          (bounds.northeast.longitude + bounds.southwest.longitude) / 2);
-      locationBias = '&location=${center.latitude},${center.longitude}&radius=50000'; // 50km radius
-    }
     final String url =
-        'https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${Uri.encodeComponent(query)}&key=$_placesApiKey&types=establishment|geocode$locationBias';
+        'https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${Uri.encodeComponent(query)}&key=$_googleMapsApiKey&types=establishment|geocode';
     try {
       final response = await http.get(Uri.parse(url));
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['status'] == 'OK') {
-          List<SearchResult?> nullableResults = await Future.wait(
+          List<SearchResult> finalResults = await Future.wait(
             (data['predictions'] as List).map((p) async {
               final details = await _getPlaceDetails(p['place_id']);
-              return details != null
-                  ? SearchResult(
+              return SearchResult(
                 name: p['structured_formatting']['main_text'] ?? p['description'],
                 address: p['structured_formatting']['secondary_text'] ?? '',
-                latitude: details['lat']!,
-                longitude: details['lng']!,
-              )
-                  : null;
+                latitude: details?['lat'] ?? 0.0,
+                longitude: details?['lng'] ?? 0.0,
+              );
             }),
           );
-          final List<SearchResult> finalResults =
-          nullableResults.whereType<SearchResult>().toList();
           if (!mounted) return;
           setState(() {
-            _searchResults = finalResults;
+            _searchResults = finalResults.where((r) => r.latitude != 0.0).toList();
             _isSearching = false;
           });
         } else {
@@ -243,14 +197,13 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
         _showSearchError();
       }
     } catch (e) {
-      print('Places API error: $e');
       _showSearchError();
     }
   }
 
   Future<Map<String, double>?> _getPlaceDetails(String placeId) async {
     final String url =
-        'https://maps.googleapis.com/maps/api/place/details/json?place_id=$placeId&fields=geometry&key=$_placesApiKey';
+        'https://maps.googleapis.com/maps/api/place/details/json?place_id=$placeId&fields=geometry&key=$_googleMapsApiKey';
     try {
       final response = await http.get(Uri.parse(url));
       if (response.statusCode == 200) {
@@ -287,8 +240,6 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
     _animateToPosition(result.latitude, result.longitude);
   }
 
-  // --- Waypoint Management ---
-
   void _addWaypoint(String name, double lat, double lng) {
     final waypoint = Waypoint(id: 'waypoint_${_waypoints.length}', name: name, position: LatLng(lat, lng));
     setState(() {
@@ -297,36 +248,34 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
         Marker(
           markerId: MarkerId(waypoint.id),
           position: waypoint.position,
-          infoWindow: InfoWindow(title: waypoint.name, snippet: 'Waypoint ${_waypoints.length}'),
+          infoWindow: InfoWindow(title: waypoint.name),
           icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
           onTap: () => _showWaypointOptions(waypoint),
         ),
       );
     });
   }
-
-  void _removeWaypoint(String waypointId) => setState(() {
-    _waypoints.removeWhere((w) => w.id == waypointId);
-    _markers.removeWhere((m) => m.markerId.value == waypointId);
-  });
+  void _removeWaypoint(String waypointId) {
+    setState(() {
+      _waypoints.removeWhere((w) => w.id == waypointId);
+      _markers.removeWhere((m) => m.markerId.value == waypointId);
+    });
+  }
 
   void _clearAllWaypoints() {
     if (_isRideActive) _cancelRide();
     setState(() {
-      _markers.removeWhere((m) => _waypoints.any((w) => w.id == m.markerId.value));
+      _markers.removeWhere((m) => m.markerId.value.startsWith('waypoint_'));
       _waypoints.clear();
     });
     Navigator.pop(context);
   }
 
-  // --- Ride Functionality ---
+  // --- Core "Worst Route" Logic ---
 
   Future<void> _startRideToDestination(Waypoint destination) async {
     if (_currentPosition == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Current location not available.'),
-        backgroundColor: Colors.red,
-      ));
+      _showRouteError('Current location not available.');
       return;
     }
     setState(() {
@@ -334,102 +283,165 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
       _activeDestination = destination;
     });
     _rideAnimationController.forward();
-    await _createRouteToDestination(destination);
+    await _createWorstRoute(destination);
     _startLocationTracking();
   }
 
-  // --- !!! API CALL ONLY WITH VALID (ON-ROAD) WAYPOINTS !!!
-  Future<void> _createRouteToDestination(Waypoint destination) async {
-    if (_currentPosition == null) return;
+  Future<void> _createWorstRoute(Waypoint destination) async {
+    final startPoint = LatLng(_currentPosition!.latitude, _currentPosition!.longitude);
+    final endPoint = destination.position;
 
-    final start = LatLng(_currentPosition!.latitude, _currentPosition!.longitude);
-    final end = destination.position;
+    final String? startName = await _getPlaceName(startPoint);
+    final String? endName = await _getPlaceName(endPoint);
 
-    // The &alternatives=true parameter is added to get multiple routes
+    if (startName == null || endName == null) {
+      _showRouteError("Could not identify start or end location names.");
+      _cancelRide();
+      return;
+    }
+
+    final List<String>? waypointNames = await _getWaypointsFromGemini(startName, endName);
+
+    if (waypointNames == null || waypointNames.isEmpty) {
+      _showRouteError("Gemini could not provide waypoints. Try again.");
+      _cancelRide();
+      return;
+    }
+
+    final List<LatLng> geocodedWaypoints = await _geocodeWaypointNames(waypointNames);
+
+    if (geocodedWaypoints.length != waypointNames.length) {
+      _showRouteError("Could not find all locations suggested by Gemini.");
+      _cancelRide();
+      return;
+    }
+
+    await _getDirectionsWithWaypoints(startPoint, endPoint, geocodedWaypoints);
+  }
+
+  // --- Gemini and Geocoding Helpers ---
+
+  Future<String?> _getPlaceName(LatLng coords) async {
+    try {
+      List<Placemark> placemarks = await placemarkFromCoordinates(coords.latitude, coords.longitude);
+      if (placemarks.isNotEmpty) {
+        final place = placemarks.first;
+        return "${place.name}, ${place.locality}";
+      }
+    } catch (e) {
+      print("Error getting place name: $e");
+    }
+    return null;
+  }
+
+  Future<List<String>?> _getWaypointsFromGemini(String origin, String destination) async {
+    final url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=$_geminiApiKey';
+
+    final prompt = '''
+   Find me a deliberately inefficient and long driving route from "$origin" to "$destination".
+- The goal is to make the journey absurdly long, roughly 3 to 5 times the normal distance.
+- Suggest a series of 3 to 5 intermediate, out-of-the-way towns or landmarks to use as waypoints.
+- The final destination must still be "$destination".
+- Return ONLY the list of these intermediate place names, separated by a pipe character (|).
+- Example format: Place A|Place B|Place C
+    ''';
+
+    try {
+      final response = await http.post(
+        Uri.parse(url),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'contents': [{'parts': [{'text': prompt}]}]
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final content = data['candidates'][0]['content']['parts'][0]['text'] as String;
+        return content.trim().split('|');
+      } else {
+        print("Gemini API Error: ${response.body}");
+        return null;
+      }
+    } catch (e) {
+      print("Error calling Gemini API: $e");
+      return null;
+    }
+  }
+
+  Future<List<LatLng>> _geocodeWaypointNames(List<String> waypointNames) async {
+    List<LatLng> geocodedPoints = [];
+    for (String name in waypointNames) {
+      final url = 'https://maps.googleapis.com/maps/api/geocode/json?address=${Uri.encodeComponent(name)}&key=$_googleMapsApiKey';
+      try {
+        final response = await http.get(Uri.parse(url));
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          if (data['status'] == 'OK' && (data['results'] as List).isNotEmpty) {
+            final location = data['results'][0]['geometry']['location'];
+            geocodedPoints.add(LatLng(location['lat'], location['lng']));
+          }
+        }
+      } catch (e) {
+        print("Error geocoding '$name': $e");
+      }
+    }
+    return geocodedPoints;
+  }
+
+  // --- CORRECTED DIRECTIONS FUNCTION ---
+  Future<void> _getDirectionsWithWaypoints(LatLng origin, LatLng destination, List<LatLng> waypoints) async {
+    String waypointsString = waypoints.map((p) => '${p.latitude},${p.longitude}').join('|');
+
     final url = 'https://maps.googleapis.com/maps/api/directions/json'
-        '?origin=${start.latitude},${start.longitude}'
-        '&destination=${end.latitude},${end.longitude}'
-        '&alternatives=true' // <-- MODIFICATION IS HERE
-        '&key=$_placesApiKey';
+        '?origin=${origin.latitude},${origin.longitude}'
+        '&destination=${destination.latitude},${destination.longitude}'
+        '&waypoints=optimize:false|$waypointsString'
+        '&key=$_googleMapsApiKey';
 
     try {
       final response = await http.get(Uri.parse(url));
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['status'] == 'OK' && (data['routes'] as List).isNotEmpty) {
-          // --- Find the route with the maximum distance ---
-          List routes = data['routes'];
-          Map? longestRoute;
-          int maxDistance = 0;
-          for (var route in routes) {
-            int totalDistance = 0;
-            for (var leg in route['legs']) {
-              totalDistance += (leg['distance']['value'] as int? ?? 0);
-            }
-            if (totalDistance > maxDistance) {
-              maxDistance = totalDistance;
-              longestRoute = route;
-            }
-          }
-          if (longestRoute == null) {
-            longestRoute = routes[0]; // fallback
+          final route = data['routes'][0];
+
+          int totalDistanceInMeters = 0;
+          int totalDurationInSeconds = 0;
+
+          // Loop through ALL legs of the route to sum up distance and duration
+          for (var leg in route['legs']) {
+            totalDistanceInMeters += leg['distance']['value'] as int;
+            totalDurationInSeconds += leg['duration']['value'] as int;
           }
 
-          // --- Detailed polyline from all steps in the longest route ---
-          List<LatLng> routePoints = [];
-          double _totalDistance = 0.0;
-          double _estimatedTime = 0.0;
-          for (var leg in longestRoute?['legs']) {
-            _totalDistance += (leg['distance']['value'] as int? ?? 0);
-            _estimatedTime += (leg['duration']['value'] as int? ?? 0);
-            for (var step in leg['steps']) {
-              String stepPolyline = step['polyline']['points'];
-              routePoints.addAll(_decodePolyline(stepPolyline));
-            }
-          }
-
-          _totalDistance = _totalDistance / 1000.0;
-          _estimatedTime = _estimatedTime / 60.0;
-
-          if (!mounted) return;
           setState(() {
-            _routePoints = routePoints;
-            this._totalDistance = _totalDistance;
-            this._estimatedTime = _estimatedTime;
+            _routePoints = _decodePolyline(route['overview_polyline']['points']);
+            _totalDistance = totalDistanceInMeters / 1000.0; // Correct total distance in km
+            _estimatedTime = totalDurationInSeconds / 60.0;   // Correct total time in minutes
             _polylines = {
               Polyline(
-                polylineId: const PolylineId('route'),
-                points: routePoints,
-                color: Colors.purple.withOpacity(0.8),
+                polylineId: const PolylineId('worst_route_gemini'),
+                points: _routePoints,
+                color: Colors.red.withOpacity(0.8),
                 width: 6,
-                zIndex: 1,
               ),
             };
-            _markers.removeWhere((m) => m.markerId.value == destination.id);
-            _markers.add(
-              Marker(
-                markerId: MarkerId(destination.id),
-                position: destination.position,
-                infoWindow: InfoWindow(
-                  title: destination.name,
-                  snippet:
-                  'Destination - ${_totalDistance.toStringAsFixed(1)} km, ~${_estimatedTime.toInt()} min',
-                ),
-                icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueViolet),
-              ),
-            );
           });
-          _fitRouteInView(routePoints);
+          _fitRouteInView(_routePoints);
         } else {
-          _showRouteError(data['status']);
+          _showRouteError(data['error_message'] ?? 'Could not plot route with waypoints.');
         }
       } else {
-        _showRouteError('Failed to connect to Directions API');
+        _showRouteError('Directions API request failed.');
       }
     } catch (e) {
-      _showRouteError('An error occurred while fetching the route: $e');
+      _showRouteError("An error occurred: $e");
     }
   }
+
+
+  // --- Other Methods (UI, Tracking, etc.) ---
 
   void _cancelRide() {
     setState(() {
@@ -447,8 +459,7 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
 
   void _startLocationTracking() {
     _positionStream = Geolocator.getPositionStream(
-        locationSettings: const LocationSettings(
-            accuracy: LocationAccuracy.high, distanceFilter: 10))
+        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, distanceFilter: 10))
         .listen((Position position) {
       if (!mounted) return;
       setState(() {
@@ -458,8 +469,6 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
           Marker(
             markerId: const MarkerId('user_location'),
             position: LatLng(position.latitude, position.longitude),
-            infoWindow:
-            InfoWindow(snippet: 'Speed: ${(position.speed * 3.6).toStringAsFixed(1)} km/h'),
             icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue),
             anchor: const Offset(0.5, 0.5),
             rotation: position.heading,
@@ -473,17 +482,21 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
         if (distance < 50) _arriveAtDestination();
       }
     });
+    _routeUpdateTimer?.cancel();
+  }
 
-    _routeUpdateTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (_isRideActive && _activeDestination != null) {
-        _createRouteToDestination(_activeDestination!);
-      }
-    });
+  void _showRouteError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text('Route Error: $message'),
+      backgroundColor: Colors.red,
+    ));
+    if (_isRideActive) _cancelRide();
   }
 
   void _arriveAtDestination() {
     _cancelRide();
-    _showSimpleDialog('Arrived!', 'You have arrived at ${_activeDestination?.name ?? 'your destination'}!');
+    _showSimpleDialog('Arrived!', 'You have finally arrived at ${_activeDestination?.name ?? 'your destination'} after that ridiculous journey!');
   }
 
   void _fitRouteInView(List<LatLng> routePoints) {
@@ -491,10 +504,10 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
     double minLat = routePoints.first.latitude, maxLat = routePoints.first.latitude;
     double minLng = routePoints.first.longitude, maxLng = routePoints.first.longitude;
     for (var point in routePoints) {
-      minLat = math.min(minLat, point.latitude);
-      maxLat = math.max(maxLat, point.latitude);
-      minLng = math.min(minLng, point.longitude);
-      maxLng = math.max(maxLng, point.longitude);
+      minLat = min(minLat, point.latitude);
+      maxLat = max(maxLat, point.latitude);
+      minLng = min(minLng, point.longitude);
+      maxLng = max(maxLng, point.longitude);
     }
     _mapController!.animateCamera(
       CameraUpdate.newLatLngBounds(
@@ -505,18 +518,11 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
   }
 
   void _showLocationDialog(String message) => _showSimpleDialog('Location Access', message);
-  void _showRouteError(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text('Failed to get directions: $message. Please try again.'),
-      backgroundColor: Colors.red,
-    ));
-    if (_isRideActive) _cancelRide();
-  }
 
   void _showWaypointOptions(Waypoint waypoint) {
     showModalBottomSheet(
       context: context,
+      backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (context) => Padding(
@@ -541,10 +547,10 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
                 Navigator.pop(context);
                 _startRideToDestination(waypoint);
               },
-              icon: const Icon(Icons.directions_car),
-              label: const Text('Start Ride'),
+              icon: const Icon(Icons.directions_bike_outlined),
+              label: const Text('Start Worst Route'),
               style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
+                  backgroundColor: Colors.deepOrange,
                   foregroundColor: Colors.white,
                   minimumSize: const Size(double.infinity, 44)),
             ),
@@ -592,7 +598,6 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
     );
   }
 
-  // --- Polyline Decode Helper ---
   List<LatLng> _decodePolyline(String encoded) {
     List<LatLng> points = [];
     int index = 0, len = encoded.length;
@@ -620,7 +625,6 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
     return points;
   }
 
-  // --- WIDGET BUILD ---
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -640,13 +644,13 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
             },
             zoomControlsEnabled: false,
             myLocationButtonEnabled: false,
-            myLocationEnabled: false, // Handled manually
+            myLocationEnabled: false,
           ),
           if (_showSearchBar) _buildSearchBarAndResults(),
           if (_isRideActive) _buildRideStatusPanel(),
           _buildMapControls(),
           if (_waypoints.isNotEmpty && !_isRideActive) _buildWaypointsPanel(),
-          _buildBottomInfoPanel(),
+          if (!_showSearchBar) _buildBottomInfoPanel(),
         ],
       ),
     );
@@ -656,10 +660,7 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
     return AppBar(
       backgroundColor: Colors.transparent,
       elevation: 0,
-      leading: _buildAppBarButton(
-        icon: Icons.arrow_back,
-        onPressed: () => Navigator.pop(context),
-      ),
+      automaticallyImplyLeading: false,
       actions: [
         if (_waypoints.isNotEmpty)
           _buildAppBarButton(
@@ -689,8 +690,15 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
   }
 
   Widget _buildMapControls() {
+    double bottomPosition = _isRideActive ? 120 : (_waypoints.isNotEmpty ? 200 : 20);
+    if (_showSearchBar) {
+      bottomPosition = 20;
+    } else if (!_isRideActive && _waypoints.isEmpty) {
+      bottomPosition = 120;
+    }
+
     return Positioned(
-      bottom: _isRideActive ? 120 : (_waypoints.isNotEmpty ? 200 : 150),
+      bottom: bottomPosition,
       right: 16,
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -704,10 +712,13 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
           if (!_isRideActive)
             Padding(
               padding: const EdgeInsets.only(top: 12.0),
-              child: _buildMapControlButton(
+              child: FloatingActionButton(
                 onPressed: _toggleSearchBar,
-                color: _showSearchBar ? Colors.blue : Colors.black,
-                child: const Icon(Icons.search, color: Colors.white),
+                backgroundColor: _showSearchBar ? Colors.blue.shade700 : Colors.white,
+                mini: true,
+                elevation: 4.0,
+                heroTag: 'search_button',
+                child: Icon(Icons.search, color: _showSearchBar ? Colors.white : Colors.black),
               ),
             ),
         ],
@@ -729,7 +740,7 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
 
   Widget _buildSearchBarAndResults() {
     return Positioned(
-      top: 100,
+      top: MediaQuery.of(context).padding.top + 16,
       left: 16,
       right: 16,
       child: Column(
@@ -750,6 +761,7 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
               decoration: InputDecoration(
                 hintText: 'Search places, addresses...',
                 border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                 prefixIcon: _isSearching
                     ? const Padding(
                     padding: EdgeInsets.all(12.0), child: CircularProgressIndicator(strokeWidth: 2))
@@ -791,7 +803,7 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
 
   Widget _buildRideStatusPanel() {
     return Positioned(
-      top: 100,
+      top: MediaQuery.of(context).padding.top + 16,
       left: 16,
       right: 16,
       child: AnimatedBuilder(
@@ -800,7 +812,7 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Colors.purple,
+            color: Colors.deepOrange,
             borderRadius: BorderRadius.circular(12),
             boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 10, offset: const Offset(0, 4))],
           ),
@@ -808,11 +820,11 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
             children: [
               Row(
                 children: [
-                  const Icon(Icons.directions_car, color: Colors.white),
+                  const Icon(Icons.auto_awesome, color: Colors.white),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Riding to ${_activeDestination!.name}',
+                      'AI-Generated Worst Route!',
                       style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -898,7 +910,7 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
 
   Widget _buildBottomInfoPanel() {
     final bool isRide = _isRideActive && _activeDestination != null;
-    final String title = isRide ? 'Long Ride Active!' : 'Current Location';
+    final String title = isRide ? 'Worst Ride Active!' : 'Current Location';
     final String subtitle = isRide
         ? 'To ${_activeDestination!.name}'
         : _currentPosition != null
@@ -922,10 +934,10 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
               width: 50,
               height: 50,
               decoration: BoxDecoration(
-                color: isRide ? Colors.purple.shade100 : Colors.blue.shade100,
+                color: isRide ? Colors.deepOrange.shade100 : Colors.blue.shade100,
                 shape: BoxShape.circle,
               ),
-              child: Icon(isRide ? Icons.alt_route : Icons.my_location, color: isRide ? Colors.purple : Colors.blue),
+              child: Icon(isRide ? Icons.auto_awesome : Icons.my_location, color: isRide ? Colors.deepOrange : Colors.blue),
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -947,7 +959,6 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
 }
 
 // --- Data Classes ---
-
 class Waypoint {
   final String id;
   final String name;
@@ -962,5 +973,10 @@ class SearchResult {
   final double latitude;
   final double longitude;
 
-  SearchResult({required this.name, required this.address, required this.latitude, required this.longitude});
+  SearchResult({
+    required this.name,
+    required this.address,
+    required this.latitude,
+    required this.longitude,
+  });
 }
