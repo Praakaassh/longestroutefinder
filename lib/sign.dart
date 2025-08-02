@@ -3,7 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:fluttertoast/fluttertoast.dart'; // Add this import
+import 'package:fluttertoast/fluttertoast.dart';
 import 'Home/homepage.dart';
 import 'login.dart';
 
@@ -14,7 +14,7 @@ class SignupPage extends StatefulWidget {
 
 class _SignupPageState extends State<SignupPage> {
   final _auth = FirebaseAuth.instance;
-  final _firestore = FirebaseFirestore.instance;
+  final _firestore = FirebaseFirestore.instance; // Firestore instance
   final _formKey = GlobalKey<FormState>();
   final GoogleSignIn _googleSignIn = GoogleSignIn();
 
@@ -53,10 +53,23 @@ class _SignupPageState extends State<SignupPage> {
           password: passwordController.text.trim(),
         );
 
-        print("User created successfully: ${userCredential.user?.uid}"); // Debug print
+        User? user = userCredential.user;
+        if (user != null) {
+          print("User created successfully: ${user.uid}"); // Debug print
 
-        // Update the user's display name in Firebase Auth (optional)
-        await userCredential.user!.updateDisplayName(nameController.text.trim());
+          // Update the user's display name in Firebase Auth (optional)
+          await user.updateDisplayName(nameController.text.trim());
+
+          // Store user details in Firestore
+          await _firestore.collection('users').doc(user.uid).set({
+            'uid': user.uid,
+            'name': nameController.text.trim(),
+            'email': emailController.text.trim(),
+            'createdAt': FieldValue.serverTimestamp(), // Timestamp of creation
+          });
+          print("User data stored in Firestore for email signup.");
+        }
+
 
         showToast("Account created successfully! Welcome aboard", isSuccess: true);
 
@@ -87,7 +100,22 @@ class _SignupPageState extends State<SignupPage> {
             errorMessage = e.message ?? "Signup failed";
         }
         showToast(errorMessage, isSuccess: false);
-      } catch (e) {
+      } on PlatformException catch (e) { // Added PlatformException handling
+        print("PlatformException: ${e.code} - ${e.message}"); // Debug print
+        String errorMessage = 'An unexpected platform error occurred.';
+        switch (e.code) {
+          case 'network_request_failed':
+            errorMessage = 'Network error. Please check your internet connection.';
+            break;
+          case 'ERROR_CANCELED_BY_USER': // Common for some auth flows if user cancels system prompt
+            errorMessage = 'Sign-up cancelled.';
+            break;
+          default:
+            errorMessage = e.message ?? 'An unexpected error occurred.';
+        }
+        showToast(errorMessage, isSuccess: false);
+      }
+      catch (e) {
         print("General Exception: $e"); // Debug print
         showToast("An unexpected error occurred: ${e.toString()}", isSuccess: false);
       } finally {
@@ -103,11 +131,11 @@ class _SignupPageState extends State<SignupPage> {
   Future<void> signUpWithGoogle() async {
     setState(() => isGoogleLoading = true);
     try {
-      await _googleSignIn.signOut();
+      await _googleSignIn.signOut(); // Ensure a clean sign-in
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
       if (googleUser == null) {
         setState(() => isGoogleLoading = false);
-        return;
+        return; // User cancelled the Google sign-in
       }
 
       final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
@@ -117,6 +145,21 @@ class _SignupPageState extends State<SignupPage> {
       );
 
       UserCredential userCredential = await _auth.signInWithCredential(credential);
+      User? user = userCredential.user;
+
+      if (user != null) {
+        // Store user details in Firestore. Use `set` with `merge: true`
+        // to update if the document already exists (e.g., user signed up with email first)
+        // or create if it's a new user.
+        await _firestore.collection('users').doc(user.uid).set({
+          'uid': user.uid,
+          'name': user.displayName ?? googleUser.displayName, // Prefer Firebase Auth display name, fallback to GoogleSignInAccount
+          'email': user.email ?? googleUser.email, // Prefer Firebase Auth email, fallback to GoogleSignInAccount
+          'photoURL': user.photoURL, // Store Google profile picture URL
+          'createdAt': FieldValue.serverTimestamp(), // Timestamp of creation/first sign-in
+        }, SetOptions(merge: true)); // Use merge to avoid overwriting existing data if user already exists
+        print("User data stored/updated in Firestore for Google signup.");
+      }
 
       showToast("Google Sign-Up Successful! Welcome", isSuccess: true);
 
@@ -158,10 +201,8 @@ class _SignupPageState extends State<SignupPage> {
     }
   }
 
-  // Rest of your build method and _buildInputField method remain the same...
   @override
   Widget build(BuildContext context) {
-    // Your existing build method code stays exactly the same
     return Scaffold(
       backgroundColor: Color(0xFF1A1A1A),
       body: SafeArea(

@@ -1,472 +1,55 @@
-import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:geolocator/geolocator.dart';
-import 'package:flutter/services.dart';
-import 'package:geocoding/geocoding.dart';
 import 'dart:async';
 import 'dart:convert';
-import 'package:http/http.dart' as http;
 import 'dart:math' as math;
-
-// Coin Flip Widget
-class CoinFlipWidget extends StatefulWidget {
-  final String frontImagePath;
-  final String backImagePath;
-  final VoidCallback onFlipComplete;
-  final Duration animationDuration;
-
-  const CoinFlipWidget({
-    Key? key,
-    required this.frontImagePath,
-    required this.backImagePath,
-    required this.onFlipComplete,
-    this.animationDuration = const Duration(milliseconds: 2000),
-  }) : super(key: key);
-
-  @override
-  State<CoinFlipWidget> createState() => _CoinFlipWidgetState();
-}
-
-class _CoinFlipWidgetState extends State<CoinFlipWidget>
-    with TickerProviderStateMixin {
-  late AnimationController _flipController;
-  late AnimationController _bounceController;
-  late Animation<double> _flipAnimation;
-  late Animation<double> _bounceAnimation;
-
-  bool _isFlipping = false;
-  bool _showBack = false;
-
-  @override
-  void initState() {
-    super.initState();
-
-    // Flip animation controller
-    _flipController = AnimationController(
-      duration: widget.animationDuration,
-      vsync: this,
-    );
-
-    // Bounce animation controller
-    _bounceController = AnimationController(
-      duration: const Duration(milliseconds: 300),
-      vsync: this,
-    );
-
-    // Flip animation with multiple rotations
-    _flipAnimation = Tween<double>(
-      begin: 0.0,
-      end: math.pi * 6, // 3 full rotations
-    ).animate(CurvedAnimation(
-      parent: _flipController,
-      curve: Curves.easeInOut,
-    ));
-
-    // Bounce animation for landing effect
-    _bounceAnimation = Tween<double>(
-      begin: 1.0,
-      end: 1.2,
-    ).animate(CurvedAnimation(
-      parent: _bounceController,
-      curve: Curves.elasticOut,
-    ));
-
-    _flipController.addStatusListener((status) {
-      if (status == AnimationStatus.completed) {
-        _bounceController.forward().then((_) {
-          _bounceController.reverse().then((_) {
-            widget.onFlipComplete();
-          });
-        });
-      }
-    });
-
-    _flipController.addListener(() {
-      // Determine which side to show based on rotation
-      double rotation = _flipAnimation.value % (math.pi * 2);
-      setState(() {
-        _showBack = rotation > math.pi / 2 && rotation < 3 * math.pi / 2;
-      });
-    });
-  }
-
-  @override
-  void dispose() {
-    _flipController.dispose();
-    _bounceController.dispose();
-    super.dispose();
-  }
-
-  void flipCoin() {
-    if (_isFlipping) return;
-
-    setState(() {
-      _isFlipping = true;
-    });
-
-    _flipController.reset();
-    _flipController.forward().then((_) {
-      setState(() {
-        _isFlipping = false;
-      });
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: flipCoin,
-      child: AnimatedBuilder(
-        animation: Listenable.merge([_flipAnimation, _bounceAnimation]),
-        builder: (context, child) {
-          return Transform.scale(
-            scale: _bounceAnimation.value,
-            child: Transform(
-              alignment: Alignment.center,
-              transform: Matrix4.identity()
-                ..setEntry(3, 2, 0.001)
-                ..rotateY(_flipAnimation.value),
-              child: Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.2),
-                      blurRadius: 8,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: ClipOval(
-                  child: _showBack
-                      ? Image.asset(
-                    widget.backImagePath,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) {
-                      return Container(
-                        color: Colors.orange,
-                        child: const Icon(
-                          Icons.star,
-                          color: Colors.white,
-                          size: 24,
-                        ),
-                      );
-                    },
-                  )
-                      : Image.asset(
-                    widget.frontImagePath,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) {
-                      return Container(
-                        color: Colors.amber,
-                        child: const Icon(
-                          Icons.monetization_on,
-                          color: Colors.white,
-                          size: 24,
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
-
-// Coin Result Page
-class CoinResultPage extends StatefulWidget {
-  final String result;
-
-  const CoinResultPage({
-    Key? key,
-    required this.result,
-  }) : super(key: key);
-
-  @override
-  State<CoinResultPage> createState() => _CoinResultPageState();
-}
-
-class _CoinResultPageState extends State<CoinResultPage>
-    with TickerProviderStateMixin {
-  late AnimationController _fadeController;
-  late AnimationController _scaleController;
-  late Animation<double> _fadeAnimation;
-  late Animation<double> _scaleAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-
-    _fadeController = AnimationController(
-      duration: const Duration(milliseconds: 800),
-      vsync: this,
-    );
-
-    _scaleController = AnimationController(
-      duration: const Duration(milliseconds: 600),
-      vsync: this,
-    );
-
-    _fadeAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _fadeController,
-      curve: Curves.easeIn,
-    ));
-
-    _scaleAnimation = Tween<double>(
-      begin: 0.5,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _scaleController,
-      curve: Curves.elasticOut,
-    ));
-
-    // Start animations
-    _fadeController.forward();
-    Future.delayed(const Duration(milliseconds: 200), () {
-      _scaleController.forward();
-    });
-  }
-
-  @override
-  void dispose() {
-    _fadeController.dispose();
-    _scaleController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black87,
-      body: SafeArea(
-        child: AnimatedBuilder(
-          animation: Listenable.merge([_fadeAnimation, _scaleAnimation]),
-          builder: (context, child) {
-            return Opacity(
-              opacity: _fadeAnimation.value,
-              child: Transform.scale(
-                scale: _scaleAnimation.value,
-                child: Column(
-                  children: [
-                    // Header
-                    Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Row(
-                        children: [
-                          IconButton(
-                            onPressed: () => Navigator.pop(context),
-                            icon: const Icon(
-                              Icons.arrow_back,
-                              color: Colors.white,
-                              size: 28,
-                            ),
-                          ),
-                          const Spacer(),
-                          const Text(
-                            'Coin Flip Result',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const Spacer(),
-                          const SizedBox(width: 48),
-                        ],
-                      ),
-                    ),
-
-                    // Main content
-                    Expanded(
-                      child: Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            // Result display
-                            Container(
-                              width: 200,
-                              height: 200,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                gradient: LinearGradient(
-                                  colors: widget.result == 'heads'
-                                      ? [Colors.amber, Colors.orange]
-                                      : [Colors.blue, Colors.purple],
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: (widget.result == 'heads'
-                                        ? Colors.amber
-                                        : Colors.blue)
-                                        .withOpacity(0.3),
-                                    blurRadius: 20,
-                                    spreadRadius: 5,
-                                  ),
-                                ],
-                              ),
-                              child: Center(
-                                child: Icon(
-                                  widget.result == 'heads'
-                                      ? Icons.monetization_on
-                                      : Icons.star,
-                                  size: 80,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-
-                            const SizedBox(height: 40),
-
-                            // Result text
-                            Text(
-                              widget.result.toUpperCase(),
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 36,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 4,
-                              ),
-                            ),
-
-                            const SizedBox(height: 20),
-
-                            Text(
-                              'The coin landed on ${widget.result}!',
-                              style: TextStyle(
-                                color: Colors.white.withOpacity(0.8),
-                                fontSize: 18,
-                              ),
-                            ),
-
-                            const SizedBox(height: 60),
-
-                            // Action buttons
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                              children: [
-                                ElevatedButton.icon(
-                                  onPressed: () => Navigator.pop(context),
-                                  icon: const Icon(Icons.refresh),
-                                  label: const Text('Flip Again'),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.white,
-                                    foregroundColor: Colors.black,
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 24,
-                                      vertical: 12,
-                                    ),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(25),
-                                    ),
-                                  ),
-                                ),
-                                ElevatedButton.icon(
-                                  onPressed: () {
-                                    Navigator.pop(context);
-                                  },
-                                  icon: const Icon(Icons.map),
-                                  label: const Text('Back to Map'),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.transparent,
-                                    foregroundColor: Colors.white,
-                                    side: const BorderSide(color: Colors.white),
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 24,
-                                      vertical: 12,
-                                    ),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(25),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        ),
-      ),
-    );
-  }
-}
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:geocoding/geocoding.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:http/http.dart' as http;
 
 class MapPage extends StatefulWidget {
   const MapPage({Key? key}) : super(key: key);
 
   @override
-  State<MapPage> createState() => _MapPageState();
+  State createState() => _MapPageState();
 }
 
 class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
-  final Completer<GoogleMapController> _controller = Completer<GoogleMapController>();
-
-  // Add your Google Places API key here
-  static const String _placesApiKey = 'AIzaSyBGOhyR-FU97Fd8hLbRGN8-ERs7gtlvvIs';
-
-  // Default location (San Francisco)
-  static const CameraPosition _kGooglePlex = CameraPosition(
-    target: LatLng(37.42796133580664, -122.085749655962),
-    zoom: 14.4746,
-  );
-
-  // Set of markers
-  Set<Marker> _markers = {};
-
-  // Set of polygons for route
-  Set<Polygon> _polygons = {};
-
-  // Set of polylines for route
-  Set<Polyline> _polylines = {};
-
-  // Waypoints list
-  List<Waypoint> _waypoints = [];
-
-  // User location
-  Position? _currentPosition;
-  bool _isLoadingLocation = true;
-
-  // Map type
-  MapType _currentMapType = MapType.normal;
-
-  // Map controller
+  final Completer<GoogleMapController> _controller = Completer();
   GoogleMapController? _mapController;
 
-  // Animation and UI state
+  static const String _placesApiKey = 'AIzaSyBGOhyR-FU97Fd8hLbRGN8-ERs7gtlvvIs'; // Replace with your actual key
+  static const CameraPosition _kGooglePlex =
+  CameraPosition(target: LatLng(10.8505, 76.2711), zoom: 7.0);
+
+  Set<Marker> _markers = {};
+  Set<Polygon> _polygons = {};
+  Set<Polyline> _polylines = {};
+  List<Waypoint> _waypoints = [];
+  Position? _currentPosition;
+  bool _isLoadingLocation = true;
+  MapType _currentMapType = MapType.normal;
+
+  // Search UI State
   bool _showSearchBar = false;
   final TextEditingController _searchController = TextEditingController();
   bool _isSearching = false;
   List<SearchResult> _searchResults = [];
   Timer? _debounce;
 
-  // Ride functionality
+  // Ride State
   bool _isRideActive = false;
   Waypoint? _activeDestination;
   List<LatLng> _routePoints = [];
   double _totalDistance = 0.0;
-  double _estimatedTime = 0.0;
+  double _estimatedTime = 0.0; // In minutes
 
-  // Animation controllers
+  // Animation
   late AnimationController _rideAnimationController;
   late Animation<double> _rideAnimation;
 
-  // Ride tracking
+  // Subscriptions & Timers
   StreamSubscription<Position>? _positionStream;
   Timer? _routeUpdateTimer;
 
@@ -474,18 +57,9 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
   void initState() {
     super.initState();
     _getCurrentLocation();
-    _setMarkers();
+    _setInitialMarkers();
     _initializeAnimations();
-  }
-
-  void _initializeAnimations() {
-    _rideAnimationController = AnimationController(
-      duration: const Duration(milliseconds: 800),
-      vsync: this,
-    );
-    _rideAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _rideAnimationController, curve: Curves.easeInOut),
-    );
+    _addLandUseZonePolygon();
   }
 
   @override
@@ -495,199 +69,115 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
     _rideAnimationController.dispose();
     _positionStream?.cancel();
     _routeUpdateTimer?.cancel();
+    _mapController?.dispose();
     super.dispose();
   }
 
-  // Coin flip functionality
-  void _onCoinFlipComplete() {
-    // Randomly determine heads or tails
-    final random = math.Random();
-    final result = random.nextBool() ? 'heads' : 'tails';
-
-    // Navigate to result page with slide transition
-    Navigator.of(context).push(
-      PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) =>
-            CoinResultPage(result: result),
-        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          const begin = Offset(1.0, 0.0);
-          const end = Offset.zero;
-          const curve = Curves.easeInOut;
-
-          var tween = Tween(begin: begin, end: end).chain(
-            CurveTween(curve: curve),
-          );
-
-          return SlideTransition(
-            position: animation.drive(tween),
-            child: child,
-          );
-        },
-        transitionDuration: const Duration(milliseconds: 500),
-      ),
+  void _initializeAnimations() {
+    _rideAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
     );
+    _rideAnimation =
+        CurvedAnimation(parent: _rideAnimationController, curve: Curves.easeInOut);
   }
 
-  // [Keep all your existing methods here - getCurrentLocation, addUserLocationMarker, etc.]
-  // I'll include the key ones for context:
+  void _setInitialMarkers() {
+    _markers = {};
+  }
 
+  // Add a sample polygon (demo)
+  void _addLandUseZonePolygon() {
+    final List<LatLng> polygonPoints = [
+      const LatLng(10.855, 76.275),
+      const LatLng(10.860, 76.280),
+      const LatLng(10.858, 76.285),
+      const LatLng(10.853, 76.280),
+    ];
+    final Polygon landUseZone = Polygon(
+      polygonId: const PolygonId('residential_zone_1'),
+      points: polygonPoints,
+      fillColor: Colors.blue.withOpacity(0.3),
+      strokeColor: Colors.blue,
+      strokeWidth: 2,
+      zIndex: 0,
+    );
+    setState(() {
+      _polygons.add(landUseZone);
+    });
+  }
+
+  // Location Handling
   Future<void> _getCurrentLocation() async {
     try {
-      // Check if location services are enabled
-      bool serviceEnabled;
-      LocationPermission permission;
-
-      try {
-        serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      } on PlatformException catch (e) {
-        print('Platform exception: $e');
-        serviceEnabled = true;
-      } catch (e) {
-        print('Error checking location services: $e');
-        serviceEnabled = true;
-      }
-
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
-        setState(() {
-          _isLoadingLocation = false;
-        });
-        _showLocationDialog('Location services are disabled. Please enable location services.');
+        _handleLocationError('Location services are disabled. Please enable them.');
         return;
       }
-
-      // Check location permissions
-      try {
-        permission = await Geolocator.checkPermission();
-        if (permission == LocationPermission.denied) {
-          permission = await Geolocator.requestPermission();
-          if (permission == LocationPermission.denied) {
-            setState(() {
-              _isLoadingLocation = false;
-            });
-            _showLocationDialog('Location permissions are denied');
-            return;
-          }
-        }
-
-        if (permission == LocationPermission.deniedForever) {
-          setState(() {
-            _isLoadingLocation = false;
-          });
-          _showLocationDialog('Location permissions are permanently denied, we cannot request permissions.');
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission != LocationPermission.whileInUse && permission != LocationPermission.always) {
+          _handleLocationError('Location permissions are denied.');
           return;
         }
-      } on PlatformException catch (e) {
-        print('Permission error: $e');
-        setState(() {
-          _isLoadingLocation = false;
-        });
-        _showLocationDialog('Error checking location permissions: ${e.message}');
+      }
+      if (permission == LocationPermission.deniedForever) {
+        _handleLocationError('Location permissions are permanently denied. We cannot request permissions.');
         return;
       }
-
-      // Get current position
-      try {
-        Position position = await Geolocator.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.high,
-          timeLimit: const Duration(seconds: 15),
-        );
-        setState(() {
-          _currentPosition = position;
-          _isLoadingLocation = false;
-        });
-        _animateToPosition(position.latitude, position.longitude);
-        _addUserLocationMarker();
-      } on TimeoutException catch (e) {
-        setState(() {
-          _isLoadingLocation = false;
-        });
-        _showLocationDialog('Location request timed out. Please try again.');
-      } on PlatformException catch (e) {
-        setState(() {
-          _isLoadingLocation = false;
-        });
-        _showLocationDialog('Platform error getting location: ${e.message}');
-      }
-    } catch (e) {
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+        timeLimit: const Duration(seconds: 15),
+      );
+      if (!mounted) return;
       setState(() {
+        _currentPosition = position;
         _isLoadingLocation = false;
       });
-      _showLocationDialog('Error getting location: $e');
+      _animateToPosition(position.latitude, position.longitude);
+      _addUserLocationMarker();
+    } on PlatformException catch (e) {
+      _handleLocationError('Error checking location permissions: ${e.message}');
+    } on TimeoutException {
+      _handleLocationError('Location request timed out. Please try again.');
+    } catch (e) {
+      _handleLocationError('An error occurred while getting location: $e');
+    }
+  }
+
+  void _handleLocationError(String message) {
+    if (mounted) {
+      setState(() => _isLoadingLocation = false);
+      _showLocationDialog(message);
     }
   }
 
   void _addUserLocationMarker() {
     if (_currentPosition != null) {
-      setState(() {
-        _markers.add(
-          Marker(
-            markerId: const MarkerId('user_location'),
-            position: LatLng(_currentPosition!.latitude, _currentPosition!.longitude),
-            infoWindow: const InfoWindow(
-              title: 'Your Location',
-              snippet: 'You are here',
-            ),
-            icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue),
-          ),
-        );
-      });
+      setState(() => _markers.add(
+        Marker(
+          markerId: const MarkerId('user_location'),
+          position: LatLng(_currentPosition!.latitude, _currentPosition!.longitude),
+          infoWindow: const InfoWindow(title: 'Your Location'),
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue),
+        ),
+      ));
     }
   }
 
-  void _showLocationDialog(String message) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Location Access'),
-          content: Text(message),
-          actions: [
-            TextButton(
-              child: const Text('OK'),
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-            ),
-          ],
-        );
-      },
+  // Map Controls & Actions
+  Future<void> _animateToPosition(double lat, double lng) async {
+    final controller = await _controller.future;
+    controller.animateCamera(
+      CameraUpdate.newCameraPosition(CameraPosition(target: LatLng(lat, lng), zoom: 16.0)),
     );
   }
 
-  Future<void> _animateToPosition(double lat, double lng) async {
-    if (_mapController != null) {
-      _mapController!.animateCamera(
-        CameraUpdate.newCameraPosition(
-          CameraPosition(
-            target: LatLng(lat, lng),
-            zoom: 16.0,
-          ),
-        ),
-      );
-    }
-  }
-
-  void _setMarkers() {
-    _markers = {
-      const Marker(
-        markerId: MarkerId('marker_1'),
-        position: LatLng(37.42796133580664, -122.085749655962),
-        infoWindow: InfoWindow(
-          title: 'Google Plex',
-          snippet: 'A nice place to work',
-        ),
-        icon: BitmapDescriptor.defaultMarker,
-      ),
-    };
-  }
-
-  void _onMapTypeButtonPressed() {
-    setState(() {
-      _currentMapType = _currentMapType == MapType.normal
-          ? MapType.satellite
-          : MapType.normal;
-    });
-  }
+  void _onMapTypeButtonPressed() => setState(() {
+    _currentMapType = _currentMapType == MapType.normal ? MapType.satellite : MapType.normal;
+  });
 
   void _centerOnUserLocation() {
     if (_currentPosition != null) {
@@ -698,21 +188,444 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
   }
 
   void _toggleSearchBar() {
+    setState(() => _showSearchBar = !_showSearchBar);
+    if (!_showSearchBar) {
+      _searchController.clear();
+      setState(() => _searchResults.clear());
+    }
+  }
+
+  // Search Functionality (Places autocomplete)
+  Future<void> _searchLocation(String query) async {
+    if (query.length < 2) {
+      setState(() => _searchResults.clear());
+      return;
+    }
+    setState(() => _isSearching = true);
+    String locationBias = '';
+    if (_mapController != null) {
+      LatLngBounds bounds = await _mapController!.getVisibleRegion();
+      LatLng center = LatLng((bounds.northeast.latitude + bounds.southwest.latitude) / 2,
+          (bounds.northeast.longitude + bounds.southwest.longitude) / 2);
+      locationBias = '&location=${center.latitude},${center.longitude}&radius=50000'; // 50km radius
+    }
+    final String url =
+        'https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${Uri.encodeComponent(query)}&key=$_placesApiKey&types=establishment|geocode$locationBias';
+    try {
+      final response = await http.get(Uri.parse(url));
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['status'] == 'OK') {
+          List<SearchResult?> nullableResults = await Future.wait(
+            (data['predictions'] as List).map((p) async {
+              final details = await _getPlaceDetails(p['place_id']);
+              return details != null
+                  ? SearchResult(
+                name: p['structured_formatting']['main_text'] ?? p['description'],
+                address: p['structured_formatting']['secondary_text'] ?? '',
+                latitude: details['lat']!,
+                longitude: details['lng']!,
+              )
+                  : null;
+            }),
+          );
+          final List<SearchResult> finalResults =
+          nullableResults.whereType<SearchResult>().toList();
+          if (!mounted) return;
+          setState(() {
+            _searchResults = finalResults;
+            _isSearching = false;
+          });
+        } else {
+          _showSearchError();
+        }
+      } else {
+        _showSearchError();
+      }
+    } catch (e) {
+      print('Places API error: $e');
+      _showSearchError();
+    }
+  }
+
+  Future<Map<String, double>?> _getPlaceDetails(String placeId) async {
+    final String url =
+        'https://maps.googleapis.com/maps/api/place/details/json?place_id=$placeId&fields=geometry&key=$_placesApiKey';
+    try {
+      final response = await http.get(Uri.parse(url));
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['status'] == 'OK') {
+          final location = data['result']['geometry']['location'];
+          return {'lat': location['lat'].toDouble(), 'lng': location['lng'].toDouble()};
+        }
+      }
+    } catch (e) {
+      print('Place details error: $e');
+    }
+    return null;
+  }
+
+  void _showSearchError() {
+    if (!mounted) return;
+    setState(() => _isSearching = false);
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(const SnackBar(
+        content: Text('Search failed. Please check your connection or API key.'),
+        backgroundColor: Colors.red,
+      ));
+  }
+
+  void _selectSearchResult(SearchResult result) {
+    _addWaypoint(result.name, result.latitude, result.longitude);
     setState(() {
-      _showSearchBar = !_showSearchBar;
-      if (!_showSearchBar) {
-        _searchResults.clear();
-        _searchController.clear();
+      _searchResults.clear();
+      _searchController.clear();
+      _showSearchBar = false;
+    });
+    _animateToPosition(result.latitude, result.longitude);
+  }
+
+  // --- Waypoint Management ---
+
+  void _addWaypoint(String name, double lat, double lng) {
+    final waypoint = Waypoint(id: 'waypoint_${_waypoints.length}', name: name, position: LatLng(lat, lng));
+    setState(() {
+      _waypoints.add(waypoint);
+      _markers.add(
+        Marker(
+          markerId: MarkerId(waypoint.id),
+          position: waypoint.position,
+          infoWindow: InfoWindow(title: waypoint.name, snippet: 'Waypoint ${_waypoints.length}'),
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+          onTap: () => _showWaypointOptions(waypoint),
+        ),
+      );
+    });
+  }
+
+  void _removeWaypoint(String waypointId) => setState(() {
+    _waypoints.removeWhere((w) => w.id == waypointId);
+    _markers.removeWhere((m) => m.markerId.value == waypointId);
+  });
+
+  void _clearAllWaypoints() {
+    if (_isRideActive) _cancelRide();
+    setState(() {
+      _markers.removeWhere((m) => _waypoints.any((w) => w.id == m.markerId.value));
+      _waypoints.clear();
+    });
+    Navigator.pop(context);
+  }
+
+  // --- Ride Functionality ---
+
+  Future<void> _startRideToDestination(Waypoint destination) async {
+    if (_currentPosition == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Current location not available.'),
+        backgroundColor: Colors.red,
+      ));
+      return;
+    }
+    setState(() {
+      _isRideActive = true;
+      _activeDestination = destination;
+    });
+    _rideAnimationController.forward();
+    await _createRouteToDestination(destination);
+    _startLocationTracking();
+  }
+
+  // --- !!! API CALL ONLY WITH VALID (ON-ROAD) WAYPOINTS !!!
+  Future<void> _createRouteToDestination(Waypoint destination) async {
+    if (_currentPosition == null) return;
+
+    final start = LatLng(_currentPosition!.latitude, _currentPosition!.longitude);
+    final end = destination.position;
+
+    // The &alternatives=true parameter is added to get multiple routes
+    final url = 'https://maps.googleapis.com/maps/api/directions/json'
+        '?origin=${start.latitude},${start.longitude}'
+        '&destination=${end.latitude},${end.longitude}'
+        '&alternatives=true' // <-- MODIFICATION IS HERE
+        '&key=$_placesApiKey';
+
+    try {
+      final response = await http.get(Uri.parse(url));
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['status'] == 'OK' && (data['routes'] as List).isNotEmpty) {
+          // --- Find the route with the maximum distance ---
+          List routes = data['routes'];
+          Map? longestRoute;
+          int maxDistance = 0;
+          for (var route in routes) {
+            int totalDistance = 0;
+            for (var leg in route['legs']) {
+              totalDistance += (leg['distance']['value'] as int? ?? 0);
+            }
+            if (totalDistance > maxDistance) {
+              maxDistance = totalDistance;
+              longestRoute = route;
+            }
+          }
+          if (longestRoute == null) {
+            longestRoute = routes[0]; // fallback
+          }
+
+          // --- Detailed polyline from all steps in the longest route ---
+          List<LatLng> routePoints = [];
+          double _totalDistance = 0.0;
+          double _estimatedTime = 0.0;
+          for (var leg in longestRoute?['legs']) {
+            _totalDistance += (leg['distance']['value'] as int? ?? 0);
+            _estimatedTime += (leg['duration']['value'] as int? ?? 0);
+            for (var step in leg['steps']) {
+              String stepPolyline = step['polyline']['points'];
+              routePoints.addAll(_decodePolyline(stepPolyline));
+            }
+          }
+
+          _totalDistance = _totalDistance / 1000.0;
+          _estimatedTime = _estimatedTime / 60.0;
+
+          if (!mounted) return;
+          setState(() {
+            _routePoints = routePoints;
+            this._totalDistance = _totalDistance;
+            this._estimatedTime = _estimatedTime;
+            _polylines = {
+              Polyline(
+                polylineId: const PolylineId('route'),
+                points: routePoints,
+                color: Colors.purple.withOpacity(0.8),
+                width: 6,
+                zIndex: 1,
+              ),
+            };
+            _markers.removeWhere((m) => m.markerId.value == destination.id);
+            _markers.add(
+              Marker(
+                markerId: MarkerId(destination.id),
+                position: destination.position,
+                infoWindow: InfoWindow(
+                  title: destination.name,
+                  snippet:
+                  'Destination - ${_totalDistance.toStringAsFixed(1)} km, ~${_estimatedTime.toInt()} min',
+                ),
+                icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueViolet),
+              ),
+            );
+          });
+          _fitRouteInView(routePoints);
+        } else {
+          _showRouteError(data['status']);
+        }
+      } else {
+        _showRouteError('Failed to connect to Directions API');
+      }
+    } catch (e) {
+      _showRouteError('An error occurred while fetching the route: $e');
+    }
+  }
+
+  void _cancelRide() {
+    setState(() {
+      _isRideActive = false;
+      _activeDestination = null;
+      _routePoints.clear();
+      _polylines.clear();
+      _totalDistance = 0.0;
+      _estimatedTime = 0.0;
+    });
+    _rideAnimationController.reverse();
+    _positionStream?.cancel();
+    _routeUpdateTimer?.cancel();
+  }
+
+  void _startLocationTracking() {
+    _positionStream = Geolocator.getPositionStream(
+        locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high, distanceFilter: 10))
+        .listen((Position position) {
+      if (!mounted) return;
+      setState(() {
+        _currentPosition = position;
+        _markers.removeWhere((m) => m.markerId.value == 'user_location');
+        _markers.add(
+          Marker(
+            markerId: const MarkerId('user_location'),
+            position: LatLng(position.latitude, position.longitude),
+            infoWindow:
+            InfoWindow(snippet: 'Speed: ${(position.speed * 3.6).toStringAsFixed(1)} km/h'),
+            icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue),
+            anchor: const Offset(0.5, 0.5),
+            rotation: position.heading,
+            flat: true,
+          ),
+        );
+      });
+      if (_activeDestination != null) {
+        final distance = Geolocator.distanceBetween(
+            position.latitude, position.longitude, _activeDestination!.position.latitude, _activeDestination!.position.longitude);
+        if (distance < 50) _arriveAtDestination();
+      }
+    });
+
+    _routeUpdateTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (_isRideActive && _activeDestination != null) {
+        _createRouteToDestination(_activeDestination!);
       }
     });
   }
 
-  // [Include all your other existing methods...]
+  void _arriveAtDestination() {
+    _cancelRide();
+    _showSimpleDialog('Arrived!', 'You have arrived at ${_activeDestination?.name ?? 'your destination'}!');
+  }
 
+  void _fitRouteInView(List<LatLng> routePoints) {
+    if (routePoints.isEmpty || _mapController == null) return;
+    double minLat = routePoints.first.latitude, maxLat = routePoints.first.latitude;
+    double minLng = routePoints.first.longitude, maxLng = routePoints.first.longitude;
+    for (var point in routePoints) {
+      minLat = math.min(minLat, point.latitude);
+      maxLat = math.max(maxLat, point.latitude);
+      minLng = math.min(minLng, point.longitude);
+      maxLng = math.max(maxLng, point.longitude);
+    }
+    _mapController!.animateCamera(
+      CameraUpdate.newLatLngBounds(
+        LatLngBounds(southwest: LatLng(minLat, minLng), northeast: LatLng(maxLat, maxLng)),
+        100.0,
+      ),
+    );
+  }
+
+  void _showLocationDialog(String message) => _showSimpleDialog('Location Access', message);
+  void _showRouteError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text('Failed to get directions: $message. Please try again.'),
+      backgroundColor: Colors.red,
+    ));
+    if (_isRideActive) _cancelRide();
+  }
+
+  void _showWaypointOptions(Waypoint waypoint) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) => Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                    color: Colors.grey[300], borderRadius: BorderRadius.circular(2))),
+            const SizedBox(height: 20),
+            Text(waypoint.name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+            Text(
+                'Lat: ${waypoint.position.latitude.toStringAsFixed(4)}, Lng: ${waypoint.position.longitude.toStringAsFixed(4)}',
+                style: TextStyle(color: Colors.grey[600])),
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.pop(context);
+                _startRideToDestination(waypoint);
+              },
+              icon: const Icon(Icons.directions_car),
+              label: const Text('Start Ride'),
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(double.infinity, 44)),
+            ),
+            const SizedBox(height: 10),
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.pop(context);
+                _removeWaypoint(waypoint.id);
+              },
+              icon: const Icon(Icons.delete),
+              label: const Text('Remove Waypoint'),
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(double.infinity, 44)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showClearWaypointsDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Clear All Waypoints'),
+        content: const Text('Are you sure you want to remove all waypoints?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(onPressed: _clearAllWaypoints, child: const Text('Clear All', style: TextStyle(color: Colors.red))),
+        ],
+      ),
+    );
+  }
+
+  void _showSimpleDialog(String title, String content) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: Text(content),
+        actions: [TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('OK'))],
+      ),
+    );
+  }
+
+  // --- Polyline Decode Helper ---
+  List<LatLng> _decodePolyline(String encoded) {
+    List<LatLng> points = [];
+    int index = 0, len = encoded.length;
+    int lat = 0, lng = 0;
+    while (index < len) {
+      int b, shift = 0, result = 0;
+      do {
+        b = encoded.codeUnitAt(index++) - 63;
+        result |= (b & 0x1f) << shift;
+        shift += 5;
+      } while (b >= 0x20);
+      int dlat = ((result & 1) != 0 ? ~(result >> 1) : (result >> 1));
+      lat += dlat;
+      shift = 0;
+      result = 0;
+      do {
+        b = encoded.codeUnitAt(index++) - 63;
+        result |= (b & 0x1f) << shift;
+        shift += 5;
+      } while (b >= 0x20);
+      int dlng = ((result & 1) != 0 ? ~(result >> 1) : (result >> 1));
+      lng += dlng;
+      points.add(LatLng((lat / 1E5), (lng / 1E5)));
+    }
+    return points;
+  }
+
+  // --- WIDGET BUILD ---
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       extendBodyBehindAppBar: true,
+      appBar: _buildAppBar(),
       body: Stack(
         children: [
           GoogleMap(
@@ -721,311 +634,326 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin {
             markers: _markers,
             polygons: _polygons,
             polylines: _polylines,
-            onMapCreated: (GoogleMapController controller) {
+            onMapCreated: (controller) {
               _controller.complete(controller);
               _mapController = controller;
             },
-            onTap: (LatLng location) {
-              setState(() {
-                _markers.add(Marker(
-                  markerId: MarkerId('tapped_${_markers.length}'),
-                  position: location,
-                  infoWindow: InfoWindow(
-                    title: 'New Location',
-                    snippet: 'Lat: ${location.latitude.toStringAsFixed(4)}, Lng: ${location.longitude.toStringAsFixed(4)}',
-                  ),
-                  icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-                ));
-              });
-            },
             zoomControlsEnabled: false,
-            compassEnabled: false,
-            myLocationEnabled: false,
             myLocationButtonEnabled: false,
-            trafficEnabled: false,
-            buildingsEnabled: true,
+            myLocationEnabled: false, // Handled manually
           ),
-
-          // Top Left Controls Container
-          Positioned(
-            top: MediaQuery.of(context).padding.top + 16,
-            left: 16,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Back Button
-                Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: IconButton(
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.arrow_back, color: Colors.black),
-                    iconSize: 24,
-                  ),
-                ),
-
-                const SizedBox(height: 12),
-
-                // Google Earth View Toggle Button
-                Container(
-                  decoration: BoxDecoration(
-                    color: _currentMapType == MapType.satellite ? Colors.blue : Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: IconButton(
-                    onPressed: _onMapTypeButtonPressed,
-                    icon: Icon(
-                      _currentMapType == MapType.normal ? Icons.satellite_alt : Icons.map,
-                      color: _currentMapType == MapType.satellite ? Colors.white : Colors.black,
-                    ),
-                    iconSize: 24,
-                    tooltip: _currentMapType == MapType.satellite ? 'Normal View' : 'Satellite View',
-                  ),
-                ),
-
-                const SizedBox(height: 12),
-
-                // Coin Flip Widget
-                Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  padding: const EdgeInsets.all(6),
-                  child: CoinFlipWidget(
-                    frontImagePath: 'assets/images/coin_heads.png',
-                    backImagePath: 'assets/images/coin_tails.png',
-                    onFlipComplete: _onCoinFlipComplete,
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // [Keep all your existing positioned widgets - search bar, ride status, etc.]
-          // Search Bar
-          if (_showSearchBar)
-            Positioned(
-              top: 100,
-              left: 16,
-              right: 16,
-              child: Column(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(25),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.1),
-                          blurRadius: 10,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: TextField(
-                      controller: _searchController,
-                      onChanged: (value) {
-                        // Implement your search logic here
-                      },
-                      decoration: const InputDecoration(
-                        hintText: 'Search places, addresses, landmarks...',
-                        border: InputBorder.none,
-                        prefixIcon: Icon(Icons.search, color: Colors.grey),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-          // Bottom Control Panel
-          Positioned(
-            bottom: _waypoints.isEmpty && !_isRideActive ? 150 : _isRideActive ? 120 : 200,
-            right: 16,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Location button
-                Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
-                        blurRadius: 10,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: IconButton(
-                    onPressed: _isLoadingLocation ? null : _centerOnUserLocation,
-                    icon: _isLoadingLocation
-                        ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                        : const Icon(Icons.my_location, color: Colors.blue),
-                    iconSize: 24,
-                  ),
-                ),
-
-                // Search toggle button (hide during ride)
-                if (!_isRideActive)
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    decoration: BoxDecoration(
-                      color: _showSearchBar ? Colors.blue : Colors.black,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.2),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: IconButton(
-                      onPressed: _toggleSearchBar,
-                      icon: const Icon(Icons.search, color: Colors.white),
-                      iconSize: 24,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-
-          // Bottom Sheet Handle (Uber-style)
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: Container(
-              height: 120,
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(20),
-                  topRight: Radius.circular(20),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black12,
-                    blurRadius: 10,
-                    offset: Offset(0, -2),
-                  ),
-                ],
-              ),
-              child: Column(
-                children: [
-                  // Handle
-                  Container(
-                    margin: const EdgeInsets.only(top: 12),
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.grey[300],
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  // Content
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 50,
-                            height: 50,
-                            decoration: BoxDecoration(
-                              color: _isRideActive ? Colors.green.shade100 : Colors.grey[100],
-                              borderRadius: BorderRadius.circular(25),
-                            ),
-                            child: Icon(
-                              _isRideActive ? Icons.directions_car : Icons.location_on,
-                              color: _isRideActive ? Colors.green : Colors.blue,
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  _isRideActive ? 'Ride Active' : 'Current Location',
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  _isRideActive && _activeDestination != null
-                                      ? 'To ${_activeDestination!.name}'
-                                      : _currentPosition != null
-                                      ? 'Lat: ${_currentPosition!.latitude.toStringAsFixed(4)}, Lng: ${_currentPosition!.longitude.toStringAsFixed(4)}'
-                                      : 'Getting location...',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: Colors.grey[600],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+          if (_showSearchBar) _buildSearchBarAndResults(),
+          if (_isRideActive) _buildRideStatusPanel(),
+          _buildMapControls(),
+          if (_waypoints.isNotEmpty && !_isRideActive) _buildWaypointsPanel(),
+          _buildBottomInfoPanel(),
         ],
+      ),
+    );
+  }
+
+  AppBar _buildAppBar() {
+    return AppBar(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      leading: _buildAppBarButton(
+        icon: Icons.arrow_back,
+        onPressed: () => Navigator.pop(context),
+      ),
+      actions: [
+        if (_waypoints.isNotEmpty)
+          _buildAppBarButton(
+            icon: Icons.clear_all,
+            color: Colors.red,
+            onPressed: _showClearWaypointsDialog,
+          ),
+        _buildAppBarButton(
+          icon: _currentMapType == MapType.normal ? Icons.layers : Icons.map,
+          onPressed: _onMapTypeButtonPressed,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAppBarButton(
+      {required IconData icon, required VoidCallback onPressed, Color color = Colors.black}) {
+    return Container(
+      margin: const EdgeInsets.all(8.0),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        shape: BoxShape.circle,
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 2))],
+      ),
+      child: IconButton(onPressed: onPressed, icon: Icon(icon, color: color)),
+    );
+  }
+
+  Widget _buildMapControls() {
+    return Positioned(
+      bottom: _isRideActive ? 120 : (_waypoints.isNotEmpty ? 200 : 150),
+      right: 16,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildMapControlButton(
+            onPressed: _isLoadingLocation ? null : _centerOnUserLocation,
+            child: _isLoadingLocation
+                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.my_location, color: Colors.blue),
+          ),
+          if (!_isRideActive)
+            Padding(
+              padding: const EdgeInsets.only(top: 12.0),
+              child: _buildMapControlButton(
+                onPressed: _toggleSearchBar,
+                color: _showSearchBar ? Colors.blue : Colors.black,
+                child: const Icon(Icons.search, color: Colors.white),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMapControlButton(
+      {required VoidCallback? onPressed, required Widget child, Color color = Colors.white}) {
+    return FloatingActionButton(
+      onPressed: onPressed,
+      backgroundColor: color,
+      mini: true,
+      elevation: 4.0,
+      heroTag: null,
+      child: child,
+    );
+  }
+
+  Widget _buildSearchBarAndResults() {
+    return Positioned(
+      top: 100,
+      left: 16,
+      right: 16,
+      child: Column(
+        children: [
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(25),
+              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10)],
+            ),
+            child: TextField(
+              controller: _searchController,
+              autofocus: true,
+              onChanged: (value) {
+                _debounce?.cancel();
+                _debounce = Timer(const Duration(milliseconds: 500), () => _searchLocation(value));
+              },
+              decoration: InputDecoration(
+                hintText: 'Search places, addresses...',
+                border: InputBorder.none,
+                prefixIcon: _isSearching
+                    ? const Padding(
+                    padding: EdgeInsets.all(12.0), child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.search, color: Colors.grey),
+                suffixIcon: _searchController.text.isNotEmpty
+                    ? IconButton(onPressed: _searchController.clear, icon: const Icon(Icons.clear, color: Colors.grey))
+                    : null,
+              ),
+            ),
+          ),
+          if (_searchResults.isNotEmpty)
+            Container(
+              margin: const EdgeInsets.only(top: 8),
+              height: 200,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10)],
+              ),
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: _searchResults.length,
+                separatorBuilder: (context, index) => const Divider(height: 1),
+                itemBuilder: (context, index) {
+                  final result = _searchResults[index];
+                  return ListTile(
+                    leading: const Icon(Icons.location_on, color: Colors.blue),
+                    title: Text(result.name, style: const TextStyle(fontWeight: FontWeight.w500)),
+                    subtitle: Text(result.address, style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                    onTap: () => _selectSearchResult(result),
+                  );
+                },
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRideStatusPanel() {
+    return Positioned(
+      top: 100,
+      left: 16,
+      right: 16,
+      child: AnimatedBuilder(
+        animation: _rideAnimation,
+        builder: (context, child) => Transform.scale(scale: _rideAnimation.value, child: child),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.purple,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 10, offset: const Offset(0, 4))],
+          ),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.directions_car, color: Colors.white),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Riding to ${_activeDestination!.name}',
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  IconButton(onPressed: _cancelRide, icon: const Icon(Icons.close, color: Colors.white)),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _buildRideInfo(Icons.straighten, '${_totalDistance.toStringAsFixed(1)} km'),
+                  _buildRideInfo(Icons.access_time, '${_estimatedTime.toInt()} min'),
+                  _buildRideInfo(Icons.speed, _currentPosition != null ? '${(_currentPosition!.speed * 3.6).toStringAsFixed(0)} km/h' : '0 km/h'),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRideInfo(IconData icon, String text) {
+    return Column(
+      children: [
+        Icon(icon, color: Colors.white70, size: 20),
+        const SizedBox(height: 4),
+        Text(text, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+      ],
+    );
+  }
+
+  Widget _buildWaypointsPanel() {
+    return Positioned(
+      bottom: 120,
+      left: 16,
+      right: 16,
+      child: Container(
+        height: 80,
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10)],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Text('${_waypoints.length} Waypoint${_waypoints.length > 1 ? 's' : ''}',
+                  style: const TextStyle(fontWeight: FontWeight.w600)),
+            ),
+            Expanded(
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                itemCount: _waypoints.length,
+                itemBuilder: (context, index) {
+                  final waypoint = _waypoints[index];
+                  return Container(
+                    margin: const EdgeInsets.only(right: 8, top: 4),
+                    child: GestureDetector(
+                      onTap: () => _showWaypointOptions(waypoint),
+                      child: Chip(
+                        avatar: const Icon(Icons.location_on, size: 16),
+                        label: Text(waypoint.name, style: const TextStyle(fontSize: 12)),
+                        backgroundColor: Colors.green.shade50,
+                        deleteIcon: const Icon(Icons.close, size: 16),
+                        onDeleted: () => _removeWaypoint(waypoint.id),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBottomInfoPanel() {
+    final bool isRide = _isRideActive && _activeDestination != null;
+    final String title = isRide ? 'Long Ride Active!' : 'Current Location';
+    final String subtitle = isRide
+        ? 'To ${_activeDestination!.name}'
+        : _currentPosition != null
+        ? 'Lat: ${_currentPosition!.latitude.toStringAsFixed(4)}, Lng: ${_currentPosition!.longitude.toStringAsFixed(4)}'
+        : 'Getting location...';
+    return Positioned(
+      bottom: 0,
+      left: 0,
+      right: 0,
+      child: Container(
+        height: 110,
+        padding: const EdgeInsets.all(20),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, -2))],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 50,
+              height: 50,
+              decoration: BoxDecoration(
+                color: isRide ? Colors.purple.shade100 : Colors.blue.shade100,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(isRide ? Icons.alt_route : Icons.my_location, color: isRide ? Colors.purple : Colors.blue),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 4),
+                  Text(subtitle, style: TextStyle(fontSize: 14, color: Colors.grey[600]), overflow: TextOverflow.ellipsis),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-// Data classes (keep your existing ones)
+// --- Data Classes ---
+
 class Waypoint {
   final String id;
   final String name;
   final LatLng position;
 
-  Waypoint({
-    required this.id,
-    required this.name,
-    required this.position,
-  });
+  Waypoint({required this.id, required this.name, required this.position});
 }
 
 class SearchResult {
@@ -1034,10 +962,5 @@ class SearchResult {
   final double latitude;
   final double longitude;
 
-  SearchResult({
-    required this.name,
-    required this.address,
-    required this.latitude,
-    required this.longitude,
-  });
+  SearchResult({required this.name, required this.address, required this.latitude, required this.longitude});
 }

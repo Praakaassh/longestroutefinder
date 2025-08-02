@@ -1,19 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:tinderprojecthub/Home/settings.dart';
 
-import 'mappage.dart';
+// Make sure you have this file for the map page.
+import 'package:tinderprojecthub/Home/mappage.dart';
 
-// A placeholder widget for the Profile page to prevent errors
-class ProfilePage extends StatelessWidget {
+
+// Placeholder for your Scoreboard Page. Create this file or replace the widget.
+class ScoreboardPage extends StatelessWidget {
+  const ScoreboardPage({super.key});
+
   @override
   Widget build(BuildContext context) {
     return const Center(
-      child: Text('Profile Page', style: TextStyle(fontSize: 24)),
+      child: Text('Scoreboard Page', style: TextStyle(color: Colors.white, fontSize: 18)),
     );
   }
 }
+
+// ------------------- Main Home Page Widget -------------------
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -23,127 +28,20 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  final GoogleSignIn _googleSignIn = GoogleSignIn();
   int _selectedIndex = 0;
-  late PageController _pageController; // Controller for the PageView
+  final GoogleSignIn _googleSignIn = GoogleSignIn();
 
-  // List of pages for navigation (Added ProfilePage)
+  // List of pages to navigate between
   final List<Widget> _pages = [
-    HomeContent(),
+    const HomeContent(),
     const MapPage(),
-    SettingsPage(),
-    ProfilePage(), // Added page for the profile icon
+    const ScoreboardPage(),
   ];
 
-  @override
-  void initState() {
-    super.initState();
-    // Initialize the controller with the starting page index
-    _pageController = PageController(initialPage: _selectedIndex);
-  }
-
-  @override
-  void dispose() {
-    // Dispose of the controller when the widget is removed
-    _pageController.dispose();
-    super.dispose();
-  }
-
-  // This function now animates the PageView to the new page
-  void _onItemTapped(int index) {
-    _pageController.animateToPage(
-      index,
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeInOut,
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(_getAppBarTitle()),
-        backgroundColor: Colors.blue,
-        foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            onPressed: () => _signOut(context),
-            icon: const Icon(Icons.logout),
-          ),
-        ],
-      ),
-      // Use PageView to enable swiping
-      body: PageView(
-        controller: _pageController,
-        // THIS IS THE KEY CHANGE TO DISABLE SWIPING
-        physics: const NeverScrollableScrollPhysics(),
-        onPageChanged: (index) {
-          // Update the selected index when the user swipes
-          setState(() {
-            _selectedIndex = index;
-          });
-        },
-        children: _pages,
-      ),
-      // Removed the notch properties from BottomAppBar
-      bottomNavigationBar: BottomAppBar(
-        child: SizedBox(
-          height: 60,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _buildNavItem(Icons.home, 'Home', 0),
-              _buildNavItem(Icons.map, 'Map', 1),
-              _buildNavItem(Icons.settings, 'Settings', 2),
-              _buildNavItem(Icons.person, 'Profile', 3),
-            ],
-          ),
-        ),
-      ),
-      // REMOVED FloatingActionButton and its location
-    );
-  }
-
-  Widget _buildNavItem(IconData icon, String label, int index) {
-    final isSelected = _selectedIndex == index;
-    return GestureDetector(
-      onTap: () => _onItemTapped(index),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            icon,
-            color: isSelected ? Colors.blue : Colors.grey,
-            size: 24,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              color: isSelected ? Colors.blue : Colors.grey,
-              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _getAppBarTitle() {
-    switch (_selectedIndex) {
-      case 0:
-        return 'Home';
-      case 1:
-        return 'Map';
-      case 2:
-        return 'Settings';
-      case 3:
-        return 'Profile'; // Added title for Profile page
-      default:
-        return 'Home';
-    }
+  void _onTabTapped(int index) {
+    setState(() {
+      _selectedIndex = index;
+    });
   }
 
   Future<void> _signOut(BuildContext context) async {
@@ -151,6 +49,8 @@ class _HomePageState extends State<HomePage> {
       await FirebaseAuth.instance.signOut();
       await _googleSignIn.signOut();
       if (mounted) {
+        // Navigate to your signup or login screen.
+        // Make sure you have a '/signup' route in your main.dart
         Navigator.pushReplacementNamed(context, '/signup');
       }
     } catch (e) {
@@ -161,82 +61,198 @@ class _HomePageState extends State<HomePage> {
       }
     }
   }
-}
 
-
-// Home Content Widget (your original home page content)
-class HomeContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF121212), // Dark background color
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20.0),
+          child: Column(
+            children: [
+              // Custom Header
+              _buildAppBar(context),
+              const SizedBox(height: 24),
+              // Custom Tab Bar
+              _buildTabBar(),
+              const SizedBox(height: 24),
+              // Page Content
+              Expanded(
+                child: IndexedStack(
+                  index: _selectedIndex,
+                  children: _pages,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Builds the custom header/app bar.
+  Widget _buildAppBar(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        const Text(
+          'Longest Route',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 22,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        IconButton(
+          onPressed: () => _signOut(context),
+          icon: const Icon(Icons.exit_to_app, color: Colors.white),
+        ),
+      ],
+    );
+  }
+
+  /// Builds the custom tab bar for navigation.
+  Widget _buildTabBar() {
+    return Row(
+      children: [
+        _buildTabItem('Home', 0),
+        const SizedBox(width: 16),
+        _buildTabItem('Map', 1),
+        const SizedBox(width: 16),
+        _buildTabItem('Scoreboard', 2),
+      ],
+    );
+  }
+
+  /// Builds a single tab item.
+  Widget _buildTabItem(String title, int index) {
+    final isSelected = _selectedIndex == index;
+    return GestureDetector(
+      onTap: () => _onTabTapped(index),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFFB5FF42) : Colors.grey[850],
+          borderRadius: BorderRadius.circular(30),
+        ),
+        child: Text(
+          title,
+          style: TextStyle(
+            color: isSelected ? Colors.black : Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ------------------- Content for the Home Tab -------------------
+
+class HomeContent extends StatelessWidget {
+  const HomeContent({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    // Get the current user from Firebase Auth to display their info
     final user = FirebaseAuth.instance.currentUser;
 
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(20.0),
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // --- Profile Section ---
+          Center(
+            child: Column(
+              children: [
+                CircleAvatar(
+                  radius: 45,
+                  backgroundColor: Colors.grey[800],
+                  // Use a placeholder if the user image is null
+                  backgroundImage: user?.photoURL != null
+                      ? NetworkImage(user!.photoURL!)
+                      : null,
+                  child: user?.photoURL == null
+                  // A default icon as a placeholder
+                      ? const Icon(Icons.person, size: 45, color: Colors.white70)
+                      : null,
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Welcome back!',
+                  style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  user?.displayName ?? 'Subinraj', // Display user's name or a default
+                  style: const TextStyle(color: Color(0xFFB5FF42), fontSize: 16, fontWeight: FontWeight.w500),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 30),
+
+          // --- Stats Section ---
+          const Text(
+            'Your Stats',
+            style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 16),
+          _buildStatsRow(),
+          const SizedBox(height: 30),
+
+          // --- Recent Activity Section ---
+          const Text(
+            'Recent Activity',
+            style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 16),
+          _buildActivityItem(),
+          // You can add more activity items here if needed
+        ],
+      ),
+    );
+  }
+
+  /// Builds the row of stat cards.
+  Widget _buildStatsRow() {
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildStatCard('Total Score', '12,500'),
+          const SizedBox(width: 12),
+          _buildStatCard('Time Traveled', '32h 15m'),
+          const SizedBox(width: 12),
+          _buildStatCard('Routes Completed', '7'),
+        ],
+      ),
+    );
+  }
+
+
+  /// Builds a card for the stats grid.
+  Widget _buildStatCard(String title, String value) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.grey[900],
+          borderRadius: BorderRadius.circular(16),
+        ),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // User Avatar
-            CircleAvatar(
-              radius: 50,
-              backgroundImage: user?.photoURL != null
-                  ? NetworkImage(user!.photoURL!)
-                  : null,
-              child: user?.photoURL == null
-                  ? const Icon(Icons.person, size: 50)
-                  : null,
-            ),
-
-            const SizedBox(height: 20),
-
-            // Welcome Message
-            const Text(
-              'Welcome!',
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-
-            const SizedBox(height: 10),
-
-            // User Name
             Text(
-              user?.displayName ?? 'User',
-              style: TextStyle(
-                fontSize: 20,
-                color: Colors.grey[600],
-              ),
+              title,
+              style: const TextStyle(color: Colors.grey, fontSize: 13),
             ),
-
-            const SizedBox(height: 10),
-
-            // User Email
+            const SizedBox(height: 8),
             Text(
-              user?.email ?? 'No email',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey[500],
-              ),
-            ),
-
-            const SizedBox(height: 40),
-
-            // Quick Actions
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _buildQuickAction(Icons.map, 'View Map', () {
-                  // You can add navigation logic here if needed,
-                  // but swiping and tapping the bottom bar already works.
-                }),
-                _buildQuickAction(Icons.settings, 'Settings', () {
-                  // Handle settings action
-                }),
-                _buildQuickAction(Icons.notification_add, 'Notifications', () {
-                  // Handle notifications
-                }),
-              ],
+              value,
+              style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
             ),
           ],
         ),
@@ -244,21 +260,25 @@ class HomeContent extends StatelessWidget {
     );
   }
 
-  Widget _buildQuickAction(IconData icon, String label, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Column(
+  /// Builds a single item for the recent activity list.
+  Widget _buildActivityItem() {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+      decoration: BoxDecoration(
+        color: Colors.grey[900],
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: const Row(
         children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.blue.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
+          Icon(Icons.check_circle, color: Color(0xFFB5FF42)),
+          SizedBox(width: 16),
+          Expanded(
+            child: Text(
+              'You leveled up to the Pacific Crest!',
+              style: TextStyle(color: Colors.white, fontSize: 14),
+              overflow: TextOverflow.ellipsis,
             ),
-            child: Icon(icon, color: Colors.blue, size: 30),
           ),
-          const SizedBox(height: 8),
-          Text(label, style: const TextStyle(fontSize: 12)),
         ],
       ),
     );
