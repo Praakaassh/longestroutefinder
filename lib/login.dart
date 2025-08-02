@@ -1,18 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:fluttertoast/fluttertoast.dart'; // Add this import
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:fluttertoast/fluttertoast.dart';
 import 'Home/homepage.dart';
-import 'login.dart';
+import 'sign.dart'; // Import your signup page
 
-class SignupPage extends StatefulWidget {
+class LoginPage extends StatefulWidget {
   @override
-  _SignupPageState createState() => _SignupPageState();
+  _LoginPageState createState() => _LoginPageState();
 }
 
-class _SignupPageState extends State<SignupPage> {
+class _LoginPageState extends State<LoginPage> {
   final _auth = FirebaseAuth.instance;
   final _firestore = FirebaseFirestore.instance;
   final _formKey = GlobalKey<FormState>();
@@ -20,10 +20,10 @@ class _SignupPageState extends State<SignupPage> {
 
   TextEditingController emailController = TextEditingController();
   TextEditingController passwordController = TextEditingController();
-  TextEditingController nameController = TextEditingController();
 
   bool isLoading = false;
   bool isGoogleLoading = false;
+  bool _obscurePassword = true;
 
   // Custom toast method matching your app's theme
   void showToast(String message, {bool isSuccess = true}) {
@@ -38,69 +38,49 @@ class _SignupPageState extends State<SignupPage> {
     );
   }
 
-  Future<void> signup() async {
-    print("Signup button pressed"); // Debug print
-
+  Future<void> login() async {
     if (_formKey.currentState!.validate()) {
-      print("Form validation passed"); // Debug print
       setState(() => isLoading = true);
-
       try {
-        print("Attempting to create user with email: ${emailController.text.trim()}"); // Debug print
-
-        UserCredential userCredential = await _auth.createUserWithEmailAndPassword(
+        UserCredential userCredential = await _auth.signInWithEmailAndPassword(
           email: emailController.text.trim(),
           password: passwordController.text.trim(),
         );
 
-        print("User created successfully: ${userCredential.user?.uid}"); // Debug print
+        showToast("Login Successful! Welcome back", isSuccess: true);
 
-        // Update the user's display name in Firebase Auth (optional)
-        await userCredential.user!.updateDisplayName(nameController.text.trim());
-
-        showToast("Account created successfully! Welcome aboard", isSuccess: true);
-
-        print("About to navigate to HomePage"); // Debug print
-
-        // Navigate to homepage after successful signup
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (context) => HomePage()),
         );
-
-        print("Navigation completed"); // Debug print
-
       } on FirebaseAuthException catch (e) {
-        print("FirebaseAuthException: ${e.code} - ${e.message}"); // Debug print
-        String errorMessage = "Signup failed";
+        String errorMessage = "Login failed";
         switch (e.code) {
-          case 'weak-password':
-            errorMessage = "Password is too weak";
+          case 'user-not-found':
+            errorMessage = "No account found with this email. Please create an account first.";
             break;
-          case 'email-already-in-use':
-            errorMessage = "Email is already registered";
+          case 'wrong-password':
+            errorMessage = "Incorrect password";
             break;
           case 'invalid-email':
             errorMessage = "Invalid email address";
             break;
+          case 'user-disabled':
+            errorMessage = "This account has been disabled";
+            break;
           default:
-            errorMessage = e.message ?? "Signup failed";
+            errorMessage = e.message ?? "Login failed";
         }
+
         showToast(errorMessage, isSuccess: false);
-      } catch (e) {
-        print("General Exception: $e"); // Debug print
-        showToast("An unexpected error occurred: ${e.toString()}", isSuccess: false);
       } finally {
         setState(() => isLoading = false);
       }
-    } else {
-      print("Form validation failed"); // Debug print
-      showToast("Please fill all fields correctly", isSuccess: false);
     }
   }
 
 
-  Future<void> signUpWithGoogle() async {
+  Future<void> signInWithGoogle() async {
     setState(() => isGoogleLoading = true);
     try {
       await _googleSignIn.signOut();
@@ -118,38 +98,49 @@ class _SignupPageState extends State<SignupPage> {
 
       UserCredential userCredential = await _auth.signInWithCredential(credential);
 
-      showToast("Google Sign-Up Successful! Welcome", isSuccess: true);
+      showToast("Google Sign-In Successful! Welcome", isSuccess: true);
 
-      // Navigate to homepage after successful Google signup
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => HomePage()),
       );
     } on FirebaseAuthException catch (e) {
-      String errorMessage = "Google sign-up failed";
+      String errorMessage = 'Google sign-in failed';
+
       switch (e.code) {
         case 'account-exists-with-different-credential':
-          errorMessage = "Account already exists with different sign-in method";
+          errorMessage = 'This email is already registered with a different method. Please use email/password login.';
           break;
         case 'invalid-credential':
-          errorMessage = "Invalid Google credentials";
+          errorMessage = 'Invalid Google credentials. Please try again.';
+          break;
+        case 'operation-not-allowed':
+          errorMessage = 'Google sign-in is not enabled. Please contact support.';
+          break;
+        case 'user-disabled':
+          errorMessage = 'This account has been disabled.';
           break;
         default:
-          errorMessage = e.message ?? "Authentication failed";
+          errorMessage = 'Firebase Auth Error: ${e.message ?? e.code}';
       }
+
       showToast(errorMessage, isSuccess: false);
     } on PlatformException catch (e) {
-      String errorMessage = 'Google sign-up failed';
+      String errorMessage = 'Google sign-in failed';
       switch (e.code) {
         case 'sign_in_failed':
-          errorMessage = 'Google sign-up configuration error';
+          errorMessage = 'Google sign-in configuration error. Check your setup.';
           break;
         case 'network_error':
           errorMessage = 'Network error. Please check connection';
           break;
+        case 'sign_in_canceled':
+          errorMessage = 'Sign-in was canceled';
+          break;
         default:
-          errorMessage = e.message ?? 'Google sign-up failed';
+          errorMessage = 'Platform Error: ${e.message ?? e.code}';
       }
+
       showToast(errorMessage, isSuccess: false);
     } catch (e) {
       showToast("An unexpected error occurred", isSuccess: false);
@@ -158,12 +149,25 @@ class _SignupPageState extends State<SignupPage> {
     }
   }
 
-  // Rest of your build method and _buildInputField method remain the same...
+
+  Future<void> resetPassword() async {
+    if (emailController.text.isEmpty) {
+      showToast("Please enter your email address first", isSuccess: false);
+      return;
+    }
+
+    try {
+      await _auth.sendPasswordResetEmail(email: emailController.text.trim());
+      showToast("Password reset email sent! Check your inbox", isSuccess: true);
+    } on FirebaseAuthException catch (e) {
+      showToast(e.message ?? "Failed to send reset email", isSuccess: false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Your existing build method code stays exactly the same
     return Scaffold(
-      backgroundColor: Color(0xFF1A1A1A),
+      backgroundColor: Color(0xFF1A1A1A), // Dark background
       body: SafeArea(
         child: SingleChildScrollView(
           padding: EdgeInsets.symmetric(horizontal: 24, vertical: 20),
@@ -172,14 +176,14 @@ class _SignupPageState extends State<SignupPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                SizedBox(height: 40),
+                SizedBox(height: 60),
 
                 // Header
                 Center(
                   child: Column(
                     children: [
                       Text(
-                        "Create Account",
+                        "Welcome Back",
                         style: TextStyle(
                           fontSize: 32,
                           fontWeight: FontWeight.bold,
@@ -188,7 +192,7 @@ class _SignupPageState extends State<SignupPage> {
                       ),
                       SizedBox(height: 8),
                       Text(
-                        "Join us and start your journey",
+                        "Sign in to continue your journey",
                         style: TextStyle(
                           fontSize: 16,
                           color: Colors.grey[400],
@@ -200,7 +204,7 @@ class _SignupPageState extends State<SignupPage> {
 
                 SizedBox(height: 50),
 
-                // Google Sign Up Button
+                // Google Sign In Button
                 Container(
                   width: double.infinity,
                   height: 56,
@@ -222,7 +226,7 @@ class _SignupPageState extends State<SignupPage> {
                     ),
                   )
                       : ElevatedButton.icon(
-                    onPressed: signUpWithGoogle,
+                    onPressed: signInWithGoogle,
                     icon: Icon(Icons.login, color: Colors.white, size: 20),
                     label: Text(
                       "Continue with Google",
@@ -277,16 +281,6 @@ class _SignupPageState extends State<SignupPage> {
 
                 SizedBox(height: 30),
 
-                // Name Field
-                _buildInputField(
-                  controller: nameController,
-                  label: "Name",
-                  icon: Icons.person_outline,
-                  validator: (value) => value!.isEmpty ? "Enter your name" : null,
-                ),
-
-                SizedBox(height: 20),
-
                 // Email Field
                 _buildInputField(
                   controller: emailController,
@@ -305,19 +299,72 @@ class _SignupPageState extends State<SignupPage> {
                 SizedBox(height: 20),
 
                 // Password Field
-                _buildInputField(
-                  controller: passwordController,
-                  label: "Password",
-                  icon: Icons.lock_outline,
-                  obscureText: true,
-                  validator: (value) => value!.length < 6
-                      ? "Password must be at least 6 characters"
-                      : null,
+                Container(
+                  decoration: BoxDecoration(
+                    color: Color(0xFF2A2A2A),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Color(0xFF3A3A3A), width: 1),
+                  ),
+                  child: TextFormField(
+                    controller: passwordController,
+                    obscureText: _obscurePassword,
+                    validator: (value) => value!.isEmpty ? "Enter your password" : null,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                    ),
+                    decoration: InputDecoration(
+                      labelText: "Password",
+                      labelStyle: TextStyle(
+                        color: Colors.grey[400],
+                        fontSize: 14,
+                      ),
+                      prefixIcon: Icon(
+                        Icons.lock_outline,
+                        color: Colors.grey[400],
+                        size: 20,
+                      ),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                          color: Colors.grey[400],
+                          size: 20,
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            _obscurePassword = !_obscurePassword;
+                          });
+                        },
+                      ),
+                      border: InputBorder.none,
+                      contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                      floatingLabelBehavior: FloatingLabelBehavior.never,
+                    ),
+                    cursorColor: Color(0xFFD4FF47),
+                  ),
+                ),
+
+                SizedBox(height: 16),
+
+                // Forgot Password
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: GestureDetector(
+                    onTap: resetPassword,
+                    child: Text(
+                      "Forgot Password?",
+                      style: TextStyle(
+                        color: Color(0xFFD4FF47),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
                 ),
 
                 SizedBox(height: 40),
 
-                // Sign Up Button
+                // Login Button
                 Container(
                   width: double.infinity,
                   height: 56,
@@ -339,9 +386,9 @@ class _SignupPageState extends State<SignupPage> {
                     ),
                   )
                       : ElevatedButton(
-                    onPressed: signup,
+                    onPressed: login,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Color(0xFFD4FF47),
+                      backgroundColor: Color(0xFFD4FF47), // Accent color
                       foregroundColor: Color(0xFF1A1A1A),
                       elevation: 0,
                       shape: RoundedRectangleBorder(
@@ -349,7 +396,7 @@ class _SignupPageState extends State<SignupPage> {
                       ),
                     ),
                     child: Text(
-                      "Create Account",
+                      "Sign In",
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
@@ -360,13 +407,13 @@ class _SignupPageState extends State<SignupPage> {
 
                 SizedBox(height: 30),
 
-                // Login Link
+                // Sign Up Link
                 Center(
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(
-                        "Already have an account? ",
+                        "Don't have an account? ",
                         style: TextStyle(
                           color: Colors.grey[400],
                           fontSize: 14,
@@ -376,11 +423,11 @@ class _SignupPageState extends State<SignupPage> {
                         onTap: () {
                           Navigator.pushReplacement(
                             context,
-                            MaterialPageRoute(builder: (context) => LoginPage()),
+                            MaterialPageRoute(builder: (context) => SignupPage()),
                           );
                         },
                         child: Text(
-                          "Login here",
+                          "Sign up here",
                           style: TextStyle(
                             color: Color(0xFFD4FF47),
                             fontSize: 14,
@@ -448,7 +495,6 @@ class _SignupPageState extends State<SignupPage> {
   void dispose() {
     emailController.dispose();
     passwordController.dispose();
-    nameController.dispose();
     super.dispose();
   }
 }

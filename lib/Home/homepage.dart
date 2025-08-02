@@ -9,15 +9,17 @@ import 'mappage.dart';
 class ProfilePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return Center(
+    return const Center(
       child: Text('Profile Page', style: TextStyle(fontSize: 24)),
     );
   }
 }
 
 class HomePage extends StatefulWidget {
+  const HomePage({super.key});
+
   @override
-  _HomePageState createState() => _HomePageState();
+  State<HomePage> createState() => _HomePageState();
 }
 
 class _HomePageState extends State<HomePage> {
@@ -28,7 +30,7 @@ class _HomePageState extends State<HomePage> {
   // List of pages for navigation (Added ProfilePage)
   final List<Widget> _pages = [
     HomeContent(),
-    MapPage(),
+    const MapPage(),
     SettingsPage(),
     ProfilePage(), // Added page for the profile icon
   ];
@@ -51,7 +53,7 @@ class _HomePageState extends State<HomePage> {
   void _onItemTapped(int index) {
     _pageController.animateToPage(
       index,
-      duration: Duration(milliseconds: 300),
+      duration: const Duration(milliseconds: 300),
       curve: Curves.easeInOut,
     );
   }
@@ -66,13 +68,15 @@ class _HomePageState extends State<HomePage> {
         actions: [
           IconButton(
             onPressed: () => _signOut(context),
-            icon: Icon(Icons.logout),
+            icon: const Icon(Icons.logout),
           ),
         ],
       ),
       // Use PageView to enable swiping
       body: PageView(
         controller: _pageController,
+        // THIS IS THE KEY CHANGE TO DISABLE SWIPING
+        physics: const NeverScrollableScrollPhysics(),
         onPageChanged: (index) {
           // Update the selected index when the user swipes
           setState(() {
@@ -83,7 +87,7 @@ class _HomePageState extends State<HomePage> {
       ),
       // Removed the notch properties from BottomAppBar
       bottomNavigationBar: BottomAppBar(
-        child: Container(
+        child: SizedBox(
           height: 60,
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -104,29 +108,25 @@ class _HomePageState extends State<HomePage> {
     final isSelected = _selectedIndex == index;
     return GestureDetector(
       onTap: () => _onItemTapped(index),
-      child: Container(
-        // Using Expanded to ensure items share space equally
-        // This is another way to prevent overflow issues
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              icon,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            icon,
+            color: isSelected ? Colors.blue : Colors.grey,
+            size: 24,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
               color: isSelected ? Colors.blue : Colors.grey,
-              size: 24,
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
             ),
-            SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                color: isSelected ? Colors.blue : Colors.grey,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -150,11 +150,15 @@ class _HomePageState extends State<HomePage> {
     try {
       await FirebaseAuth.instance.signOut();
       await _googleSignIn.signOut();
-      Navigator.pushReplacementNamed(context, '/signup');
+      if (mounted) {
+        Navigator.pushReplacementNamed(context, '/signup');
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error signing out: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error signing out: $e')),
+        );
+      }
     }
   }
 }
@@ -168,7 +172,7 @@ class HomeContent extends StatelessWidget {
 
     return Center(
       child: Padding(
-        padding: EdgeInsets.all(20.0),
+        padding: const EdgeInsets.all(20.0),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -179,14 +183,14 @@ class HomeContent extends StatelessWidget {
                   ? NetworkImage(user!.photoURL!)
                   : null,
               child: user?.photoURL == null
-                  ? Icon(Icons.person, size: 50)
+                  ? const Icon(Icons.person, size: 50)
                   : null,
             ),
 
-            SizedBox(height: 20),
+            const SizedBox(height: 20),
 
             // Welcome Message
-            Text(
+            const Text(
               'Welcome!',
               style: TextStyle(
                 fontSize: 28,
@@ -194,7 +198,7 @@ class HomeContent extends StatelessWidget {
               ),
             ),
 
-            SizedBox(height: 10),
+            const SizedBox(height: 10),
 
             // User Name
             Text(
@@ -205,7 +209,7 @@ class HomeContent extends StatelessWidget {
               ),
             ),
 
-            SizedBox(height: 10),
+            const SizedBox(height: 10),
 
             // User Email
             Text(
@@ -216,7 +220,7 @@ class HomeContent extends StatelessWidget {
               ),
             ),
 
-            SizedBox(height: 40),
+            const SizedBox(height: 40),
 
             // Quick Actions
             Row(
@@ -246,15 +250,15 @@ class HomeContent extends StatelessWidget {
       child: Column(
         children: [
           Container(
-            padding: EdgeInsets.all(12),
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: Colors.blue.withOpacity(0.1),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(icon, color: Colors.blue, size: 30),
           ),
-          SizedBox(height: 8),
-          Text(label, style: TextStyle(fontSize: 12)),
+          const SizedBox(height: 8),
+          Text(label, style: const TextStyle(fontSize: 12)),
         ],
       ),
     );
