@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "997047437506-cnnnqvcdmju14r0bsm0c7l145c83mt5u.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.tinderprojecthub",
+            "certificate_hash": "40755b227d36bcab2fd95494cbbbaed40f9ae6b1"
+          }
+        },
+        {
           "client_id": "997047437506-kiptp8aubgeqj9mejjjb15gu3qtge3sf.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
